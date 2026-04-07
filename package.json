@@ -13,7 +13,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.mjs",
-    "secret:rotate": "node scripts/rotate-secret.mjs"
+    "secret:rotate": "node scripts/rotate-secret.mjs",
+    "secret:reveal": "node scripts/reveal-secret.mjs"
   },
   "keywords": [],
   "author": "",

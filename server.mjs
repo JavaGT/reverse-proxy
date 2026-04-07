@@ -78,7 +78,7 @@ async function main() {
 
         // HTTPS Server: Main Proxy logic
         const httpsServer = https.createServer(
-            { snicallback: (domain, cb) => cb(null, tlsService.secureContext) },
+            { SNICallback: (domain, cb) => cb(null, tlsService.secureContext) },
             proxyService.createHttpsHandler()
         );
 

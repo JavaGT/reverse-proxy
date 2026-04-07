@@ -1,0 +1,205 @@
+◇ injected env (6) from .env // tip: ⌘ override existing { override: true }
+[21:57:15 UTC] [32mINFO[39m: [36mRoute registry hydrated from disk[39m
+    [35mcount[39m: 1
+[21:57:15 UTC] [32mINFO[39m: [36mTLS context reloaded successfully[39m
+    [35mevent[39m: "tls_context_reloaded"
+[21:57:15 UTC] [32mINFO[39m: [36mHealth check service starting[39m
+    [35mintervalMs[39m: 30000
+[21:57:15 UTC] [32mINFO[39m: [36mManagement interface started[39m
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:15 UTC] [32mINFO[39m: [36mHTTP Redirect Server listening on port 80[39m
+[21:57:15 UTC] [32mINFO[39m: [36mHTTPS Proxy Server listening on port 443[39m
+[21:57:18 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "56213b44-ba29-4876-9026-e8a1de5f4247"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "::ffff:127.0.0.1"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+    at Object.xForwardedForHeader (file:///Users/admin/Code/reverse-proxy/node_modules/express-rate-limit/dist/index.mjs:342:13)
+    at wrappedValidations.<computed> [as xForwardedForHeader] (file:///Users/admin/Code/reverse-proxy/node_modules/express-rate-limit/dist/index.mjs:656:22)
+    at Object.keyGenerator (file:///Users/admin/Code/reverse-proxy/node_modules/express-rate-limit/dist/index.mjs:759:20)
+    at file:///Users/admin/Code/reverse-proxy/node_modules/express-rate-limit/dist/index.mjs:823:32
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/admin/Code/reverse-proxy/node_modules/express-rate-limit/dist/index.mjs:801:5 {
+  code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+}
+[21:57:18 UTC] [32mINFO[39m: [36mStarting port scan from 80 to 443[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 80
+    [35mend[39m: 443
+[21:57:18 UTC] [32mINFO[39m: [36mPort scan complete. Found 3 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 3
+[21:57:18 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "56213b44-ba29-4876-9026-e8a1de5f4247"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "::ffff:127.0.0.1"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 68
+[21:57:18 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "22c1027e-ff73-432a-a543-f847279cab98"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/index.html"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "::ffff:127.0.0.1"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:18 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "22c1027e-ff73-432a-a543-f847279cab98"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/index.html"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "::ffff:127.0.0.1"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 3
+[21:57:29 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "4ab4ff91-4d30-4cbc-8c68-673d5fed1b7e"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:29 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "4ab4ff91-4d30-4cbc-8c68-673d5fed1b7e"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 6
+[21:57:29 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "aec8026d-bd6b-4933-ae26-48bc38fa8c53"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:29 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "aec8026d-bd6b-4933-ae26-48bc38fa8c53"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 3
+[21:57:29 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "1f210446-ece1-489e-b2e9-6a2f7c04ffac"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:29 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "1f210446-ece1-489e-b2e9-6a2f7c04ffac"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 2
+[21:57:29 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "b6e0657e-91f2-47f2-be94-8ac0ebbd2e71"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:29 UTC] [32mINFO[39m: [36mListing all routes[39m
+    [35mevent[39m: "mgmt_get_routes"
+[21:57:29 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "b6e0657e-91f2-47f2-be94-8ac0ebbd2e71"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 2
+[21:57:33 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "9ce58cf7-8b6d-438f-935f-f527ac97accb"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:33 UTC] [32mINFO[39m: [36mStarting port scan from 3000 to 4000[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 3000
+    [35mend[39m: 4000
+[21:57:33 UTC] [32mINFO[39m: [36mPort scan complete. Found 0 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 0
+[21:57:33 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "9ce58cf7-8b6d-438f-935f-f527ac97accb"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 99
+[21:57:38 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "ed66aaed-df35-472b-bda9-2ec099e00462"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:38 UTC] [32mINFO[39m: [36mStarting port scan from 1 to 4000[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 1
+    [35mend[39m: 4000
+[21:57:39 UTC] [32mINFO[39m: [36mPort scan complete. Found 4 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 4
+[21:57:39 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "ed66aaed-df35-472b-bda9-2ec099e00462"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 179
+[21:57:53 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "4de4e0da-17d5-4c6e-8f06-ada19c10491a"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:57:53 UTC] [32mINFO[39m: [36mStarting port scan from 1 to 9999[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 1
+    [35mend[39m: 9999
+[21:57:53 UTC] [32mINFO[39m: [36mPort scan complete. Found 7 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 7
+[21:57:53 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "4de4e0da-17d5-4c6e-8f06-ada19c10491a"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 330

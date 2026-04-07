@@ -1,7 +1,11 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { isLocalRequest } from "../../shared/utils/RequestUtils.mjs";
 import { readSecretFile } from "../../shared/utils/SecretUtils.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MANAGEMENT_LIMITER = rateLimit({
     windowMs: 60 * 1000,
@@ -87,18 +91,27 @@ export class ManagementServer {
         const auth = this.#requireAuth.bind(this);
         const local = this.#requireLocal.bind(this);
 
-        router.get("/", (req, res) => this.#controller.getIndex(req, res));
+        // API endpoints
         router.get("/health", (req, res) => this.#controller.getHealth(req, res));
         router.get("/routes", (req, res) => this.#controller.getRoutes(req, res));
+        router.post("/scan", local, auth, (req, res) => this.#controller.scanPorts(req, res));
         
         router.post("/reserve", local, auth, (req, res) => this.#controller.reserve(req, res));
         router.post("/rotate-secret", local, auth, (req, res) => this.#controller.rotateSecret(req, res));
         router.delete("/reserve/:subdomain", local, auth, (req, res) => this.#controller.release(req, res));
 
+        // Serve UI static assets at the root
+        this.#app.get("/health", (req, res) => this.#controller.getHealth(req, res));
+        this.#app.use(express.static(path.join(__dirname, "ui")));
         this.#app.use("/api/v1", router);
 
+        // Fallback for SPA (if we had routing) or 404
         this.#app.use((req, res) => {
-            res.status(404).json({ error: { code: "NOT_FOUND", message: "Unknown management endpoint" } });
+            if (req.accepts("html")) {
+              res.sendFile(path.join(__dirname, "ui", "index.html"));
+            } else {
+              res.status(404).json({ error: { code: "NOT_FOUND", message: "Unknown management endpoint" } });
+            }
         });
     }
 

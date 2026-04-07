@@ -21,7 +21,16 @@ export class FilePersistence {
 
         try {
             const data = fs.readFileSync(this.#filePath, "utf-8");
-            const routes = JSON.parse(data);
+            let routes = JSON.parse(data);
+            
+            // Handle object-wrapped array: { "routes": [...] }
+            if (routes && !Array.isArray(routes) && Array.isArray(routes.routes)) {
+                routes = routes.routes;
+            }
+
+            if (!Array.isArray(routes)) {
+                throw new Error("Invalid route cache format: expected an array");
+            }
             
             // Migration: Convert legacy 'target' string to 'targets' array
             return routes.map(route => {

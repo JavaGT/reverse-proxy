@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reverse Proxy Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="brand">
+                <span class="logo">🛰️</span>
+                <h1>Reverse Proxy</h1>
+            </div>
+            <div class="settings">
+                <input type="password" id="secretInput" placeholder="Management Secret" class="secret-field">
+            </div>
+        </header>
+
+        <main>
+            <aside class="sidebar">
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" data-tab="routes">🛰️ Routes</button>
+                    <button class="nav-tab" data-tab="scanner">🔍 Scanner</button>
+                </nav>
+                <div class="sidebar-actions">
+                    <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh</button>
+                    <button id="addRouteBtn" class="btn btn-primary">➕ New Route</button>
+                </div>
+            </aside>
+
+            <section id="routesTab" class="tab-content active">
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <span class="label">Total Routes</span>
+                        <span id="routeCount" class="value">0</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">Healthy Targets</span>
+                        <span id="healthyCount" class="value">0</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Active Routes</h2>
+                    <table id="routeTable">
+                        <thead>
+                            <tr>
+                                <th>Host</th>
+                                <th>Targets</th>
+                                <th>Type</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routeTableBody">
+                            <!-- Routes will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="scannerTab" class="tab-content">
+                <div class="card scanner-controls">
+                    <h2>Local Port Scanner</h2>
+                    <p class="text-muted">Discover active services on this machine (127.0.0.1) to easily proxy them.</p>
+                    
+                    <form id="scanForm" class="scan-form">
+                        <div class="form-group-inline">
+                            <label>Range:</label>
+                            <input type="number" id="scanStart" value="3000" min="1" max="65535">
+                            <span>to</span>
+                            <input type="number" id="scanEnd" value="4000" min="1" max="65535">
+                        </div>
+                        <button type="submit" id="startScanBtn" class="btn btn-primary">Start Scan</button>
+                    </form>
+
+                    <div id="scanProgressContainer" class="progress-container hidden">
+                        <div class="progress-bar-bg">
+                            <div id="scanProgressBar" class="progress-bar"></div>
+                        </div>
+                        <span id="scanStatusText" class="text-muted">Scanning...</span>
+                    </div>
+                </div>
+
+                <div class="card scanner-results">
+                    <h3>Found Services</h3>
+                    <div id="scanResultsList" class="results-grid">
+                        <!-- Results will be injected here -->
+                        <div class="empty-state">No scan performed yet.</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="addRouteModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Reserve New Route</h3>
+            <form id="addRouteForm">
+                <div class="form-group">
+                    <label for="subdomain">Subdomain</label>
+                    <input type="text" id="subdomain" name="subdomain" placeholder="e.g. hello" required>
+                </div>
+                <div class="form-group">
+                    <label for="ports">Port(s)</label>
+                    <input type="text" id="ports" name="ports" placeholder="e.g. 3000, 3001" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="closeModalBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Route</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+</body>
+</html>

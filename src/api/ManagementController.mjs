@@ -1,4 +1,6 @@
 import { generateSecret, writeSecretFile } from "../shared/utils/SecretUtils.mjs";
+import { PortScanner } from "../shared/utils/PortScanner.mjs";
+import { ProcessInfoProvider } from "../shared/utils/ProcessInfoProvider.mjs";
 
 /**
  * SRP: Contains the business logic for management API routes.
@@ -120,15 +122,37 @@ export class ManagementController {
         }
     }
 
-    getHealth(req, res) {
-        res.status(200).json({ data: { status: "OK" } });
+    async scanPorts(req, res) {
+        try {
+            const { start = 3000, end = 4000, concurrency = 100 } = req.body;
+            
+            // Limit range to prevent abuse
+            const rangeSize = end - start;
+            if (rangeSize < 0 || rangeSize > 10000) {
+                return res.status(400).json({ error: { code: "INVALID_RANGE", message: "Scan range must be between 1 and 10,000 ports" } });
+            }
+
+            this.#logger.info({ event: "mgmt_port_scan_start", start, end }, `Starting port scan from ${start} to ${end}`);
+            
+            const scanner = new PortScanner(concurrency);
+            const openPorts = await scanner.scanRange(start, end);
+            const processMap = ProcessInfoProvider.getListeningProcesses();
+            
+            const results = openPorts.map(port => ({
+                port,
+                process: processMap.get(port) || { command: "unknown", pid: "unknown" }
+            }));
+            
+            this.#logger.info({ event: "mgmt_port_scan_complete", count: results.length }, `Port scan complete. Found ${results.length} open port(s)`);
+            
+            res.status(200).json({ data: { openPorts: results } });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_scan_error", error: error.message }, "Port scan failed");
+            res.status(500).json({ error: { code: "SCAN_FAILED", message: error.message } });
+        }
     }
 
-    getIndex(req, res) {
-        res.status(200).json({ 
-            data: { 
-                message: "Reverse proxy management interface. Use GET /api/v1/routes to list registered routes." 
-            } 
-        });
+    getHealth(req, res) {
+        res.status(200).json({ data: { status: "OK" } });
     }
 }
