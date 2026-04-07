@@ -48,4 +48,25 @@ export class ProcessInfoProvider {
 
         return processMap;
     }
+
+    /**
+     * Attempts to terminate the process listening on the specified port.
+     * @param {number} port The port to clear.
+     * @returns {boolean} True if a process was found and killed, false otherwise.
+     */
+    static killProcessByPort(port) {
+        const processMap = this.getListeningProcesses();
+        const processInfo = processMap.get(port);
+
+        if (!processInfo || !processInfo.pid || processInfo.pid === "unknown") {
+            return false;
+        }
+
+        try {
+            process.kill(parseInt(processInfo.pid, 10), "SIGKILL");
+            return true;
+        } catch (err) {
+            throw new Error(`Failed to kill process ${processInfo.pid}: ${err.message}`);
+        }
+    }
 }

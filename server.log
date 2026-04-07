@@ -203,3 +203,418 @@ ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust prox
     [35mevent[39m: "proxy_request_complete"
     [35mstatus[39m: 200
     [35mduration[39m: 330
+[21:59:27 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "e56f66d4-0466-4d97-a492-b88b20f3fbac"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:59:27 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "e56f66d4-0466-4d97-a492-b88b20f3fbac"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 5
+[21:59:28 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "f9a85dcd-3cfe-4864-af98-3ac8369774e7"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:59:28 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "f9a85dcd-3cfe-4864-af98-3ac8369774e7"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 3
+[21:59:28 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "c5f460f4-2b75-4b33-9513-7928f5b0142d"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:59:28 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "c5f460f4-2b75-4b33-9513-7928f5b0142d"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 2
+[21:59:28 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "ae092b6b-8bde-4f15-8077-ee7b6918d907"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[21:59:28 UTC] [32mINFO[39m: [36mListing all routes[39m
+    [35mevent[39m: "mgmt_get_routes"
+[21:59:28 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "ae092b6b-8bde-4f15-8077-ee7b6918d907"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 2
+[22:09:34 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "317efab8-9822-47d4-8635-4ddd8525d415"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:09:34 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "317efab8-9822-47d4-8635-4ddd8525d415"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 4
+[22:09:34 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "c9f37282-802d-48b5-9b42-d5dd161137c6"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:09:34 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "20bbfb54-c42c-4011-b694-596251d2f94d"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:09:34 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "c9f37282-802d-48b5-9b42-d5dd161137c6"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 5
+[22:09:34 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "20bbfb54-c42c-4011-b694-596251d2f94d"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 5
+[22:09:34 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "cb76e4f0-9e9f-44f6-a162-37d6dc77ae62"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:09:34 UTC] [32mINFO[39m: [36mListing all routes[39m
+    [35mevent[39m: "mgmt_get_routes"
+[22:09:34 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "cb76e4f0-9e9f-44f6-a162-37d6dc77ae62"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 2
+[22:09:37 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "d7abd138-5535-4e39-a021-39c0816ebf1d"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:09:37 UTC] [32mINFO[39m: [36mCompleted with 401[39m
+    [35mrequestId[39m: "d7abd138-5535-4e39-a021-39c0816ebf1d"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 401
+    [35mduration[39m: 5
+[22:10:03 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "c36c058b-6267-4b5a-a3fc-2bd29cc53110"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:10:03 UTC] [32mINFO[39m: [36mStarting port scan from 3000 to 4000[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 3000
+    [35mend[39m: 4000
+[22:10:03 UTC] [32mINFO[39m: [36mPort scan complete. Found 0 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 0
+[22:10:03 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "c36c058b-6267-4b5a-a3fc-2bd29cc53110"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 98
+[22:10:09 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "5b088408-bf35-418b-b6cb-67a69805b137"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:10:09 UTC] [32mINFO[39m: [36mStarting port scan from 1 to 9990[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 1
+    [35mend[39m: 9990
+[22:10:09 UTC] [32mINFO[39m: [36mPort scan complete. Found 9 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 9
+[22:10:09 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "5b088408-bf35-418b-b6cb-67a69805b137"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 348
+[22:10:21 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "83d588ae-1eb3-4c14-b81a-15ad2c2e4e90"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/443"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:10:21 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "83d588ae-1eb3-4c14-b81a-15ad2c2e4e90"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/443"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 8
+[22:11:24 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "34f6d29f-b19e-41c1-8df0-77bc069d93c2"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/445"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:11:24 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "34f6d29f-b19e-41c1-8df0-77bc069d93c2"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/445"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 17
+[22:14:27 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "62199385-33a4-4bd3-9f70-500f6077e6cf"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:14:27 UTC] [32mINFO[39m: [36mStarting port scan from 1 to 9990[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 1
+    [35mend[39m: 9990
+[22:14:27 UTC] [32mINFO[39m: [36mPort scan complete. Found 7 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 7
+[22:14:27 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "62199385-33a4-4bd3-9f70-500f6077e6cf"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 353
+[22:16:53 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "8e463b91-d9bb-4dff-aa00-ecf849c608cd"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:16:53 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "8e463b91-d9bb-4dff-aa00-ecf849c608cd"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 4
+[22:16:53 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "b5866b1f-bbdb-4a7e-a2ea-1817049a7ea4"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:16:53 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "b5866b1f-bbdb-4a7e-a2ea-1817049a7ea4"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/style.css"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 3
+[22:16:53 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "552b3dd8-71a1-432c-a60c-3575d9af72ae"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:16:53 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "552b3dd8-71a1-432c-a60c-3575d9af72ae"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/app.js"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 4
+[22:16:53 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "d25e8eb2-2adf-41fa-b40b-3f185907fa6b"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:16:53 UTC] [32mINFO[39m: [36mListing all routes[39m
+    [35mevent[39m: "mgmt_get_routes"
+[22:16:53 UTC] [32mINFO[39m: [36mCompleted with 304[39m
+    [35mrequestId[39m: "d25e8eb2-2adf-41fa-b40b-3f185907fa6b"
+    [35mmethod[39m: "GET"
+    [35murl[39m: "/api/v1/routes"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 304
+    [35mduration[39m: 2
+[22:16:56 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "c95b1fca-ba97-4ec0-b055-feff810a5770"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:16:56 UTC] [32mINFO[39m: [36mCompleted with 401[39m
+    [35mrequestId[39m: "c95b1fca-ba97-4ec0-b055-feff810a5770"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 401
+    [35mduration[39m: 19
+[22:17:00 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "33ad0a07-7d2b-41bc-8f77-11677a15cb70"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:17:00 UTC] [32mINFO[39m: [36mStarting port scan from 3000 to 4000[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 3000
+    [35mend[39m: 4000
+[22:17:00 UTC] [32mINFO[39m: [36mPort scan complete. Found 0 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 0
+[22:17:00 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "33ad0a07-7d2b-41bc-8f77-11677a15cb70"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 95
+[22:17:04 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "21552e1a-db3c-425f-b6af-555f07f6f1c1"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:17:04 UTC] [32mINFO[39m: [36mStarting port scan from 1 to 4000[39m
+    [35mevent[39m: "mgmt_port_scan_start"
+    [35mstart[39m: 1
+    [35mend[39m: 4000
+[22:17:04 UTC] [32mINFO[39m: [36mPort scan complete. Found 4 open port(s)[39m
+    [35mevent[39m: "mgmt_port_scan_complete"
+    [35mcount[39m: 4
+[22:17:04 UTC] [32mINFO[39m: [36mCompleted with 200[39m
+    [35mrequestId[39m: "21552e1a-db3c-425f-b6af-555f07f6f1c1"
+    [35mmethod[39m: "POST"
+    [35murl[39m: "/api/v1/scan"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 200
+    [35mduration[39m: 160
+[22:17:07 UTC] [32mINFO[39m: [36mProxying to http://127.0.0.1:58771[39m
+    [35mrequestId[39m: "e33a5fef-1868-4dea-aebb-67d70292c3a9"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/80"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_start"
+    [35mtarget[39m: "http://127.0.0.1:58771"
+[22:17:07 UTC] [32mINFO[39m: [36mCompleted with 404[39m
+    [35mrequestId[39m: "e33a5fef-1868-4dea-aebb-67d70292c3a9"
+    [35mmethod[39m: "DELETE"
+    [35murl[39m: "/api/v1/process/80"
+    [35mhost[39m: "reverse-proxy.javagrant.ac.nz"
+    [35mclientIp[39m: "2401:7000:de9e:ca00:ecec:9033:2898:1f9a"
+    [35mevent[39m: "proxy_request_complete"
+    [35mstatus[39m: 404
+    [35mduration[39m: 4

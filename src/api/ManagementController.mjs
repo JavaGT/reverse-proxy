@@ -152,6 +152,34 @@ export class ManagementController {
         }
     }
 
+    async killProcess(req, res) {
+        try {
+            const port = parseInt(req.params.port, 10);
+            if (isNaN(port)) {
+                return res.status(400).json({ error: { code: "INVALID_PORT", message: "Invalid port number" } });
+            }
+
+            this.#logger.warn({ event: "mgmt_kill_process", port }, `Attempting to kill process on port ${port}`);
+            
+            const killed = ProcessInfoProvider.killProcessByPort(port);
+            
+            if (killed) {
+                this.#logger.info({ event: "mgmt_kill_success", port }, `Successfully killed process on port ${port}`);
+                res.status(200).json({ data: { message: `Process on port ${port} terminated` } });
+            } else {
+                res.status(404).json({ error: { code: "PROCESS_NOT_FOUND", message: `No listening process found on port ${port}` } });
+            }
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_kill_error", port: req.params.port, error: error.message }, "Failed to kill process");
+            res.status(500).json({ 
+                error: { 
+                    code: "KILL_FAILED", 
+                    message: error.message 
+                } 
+            });
+        }
+    }
+
     getHealth(req, res) {
         res.status(200).json({ data: { status: "OK" } });
     }

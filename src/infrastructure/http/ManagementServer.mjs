@@ -99,6 +99,7 @@ export class ManagementServer {
         router.post("/reserve", local, auth, (req, res) => this.#controller.reserve(req, res));
         router.post("/rotate-secret", local, auth, (req, res) => this.#controller.rotateSecret(req, res));
         router.delete("/reserve/:subdomain", local, auth, (req, res) => this.#controller.release(req, res));
+        router.delete("/process/:port", local, auth, (req, res) => this.#controller.killProcess(req, res));
 
         // Serve UI static assets at the root
         this.#app.get("/health", (req, res) => this.#controller.getHealth(req, res));

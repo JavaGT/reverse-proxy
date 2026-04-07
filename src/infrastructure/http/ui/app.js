@@ -140,6 +140,7 @@ async function apiFetch(endpoint, options = {}) {
     const secret = elements.secretInput.value;
     const headers = {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         ...options.headers
     };
 
@@ -148,7 +149,15 @@ async function apiFetch(endpoint, options = {}) {
     }
 
     const response = await fetch(endpoint, { ...options, headers });
-    const result = await response.json();
+    const contentType = response.headers.get('content-type');
+    let result;
+
+    if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+    } else {
+        const text = await response.text();
+        throw new Error(`Server returned non-JSON response (${response.status}): ${text.substring(0, 50)}`);
+    }
 
     if (!response.ok) {
         throw new Error(result.error?.message || 'API request failed');
@@ -174,6 +183,20 @@ async function releaseRoute(subdomain) {
         fetchRoutes();
     } catch (err) {
         alert(`Failed to release route: ${err.message}`);
+    }
+}
+
+async function killProcess(port) {
+    if (!confirm(`Are you sure you want to terminate the process on port ${port}? This action cannot be undone.`)) return;
+
+    try {
+        await apiFetch(`/api/v1/process/${port}`, { method: 'DELETE' });
+        // Refresh scan if possible or just remove the card
+        alert(`Process on port ${port} killed.`);
+        // Simple way to refresh: trigger the scan form again if we wanted to be fancy, 
+        // but for now just showing an alert is a good start.
+    } catch (err) {
+        alert(`Failed to kill process: ${err.message}`);
     }
 }
 
@@ -242,7 +265,10 @@ function renderScanResults(openPorts) {
                 <span>Port <strong>${port}</strong></span>
                 <span class="badge badge-type">${process.command}</span>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openRouteModal('', '${port}')">🔗 Proxy It</button>
+            <div class="result-actions">
+                <button class="btn btn-primary btn-sm" onclick="openRouteModal('', '${port}')">🔗 Proxy It</button>
+                <button class="btn btn-danger btn-sm" onclick="killProcess('${port}')">💀 Kill</button>
+            </div>
         `;
         elements.scanResultsList.appendChild(card);
     });
@@ -250,5 +276,6 @@ function renderScanResults(openPorts) {
 
 // Expose to window for inline onclick handlers
 window.releaseRoute = releaseRoute;
+window.killProcess = killProcess;
 window.fetchRoutes = fetchRoutes;
 window.openRouteModal = openRouteModal;
