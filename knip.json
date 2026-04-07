@@ -1,0 +1,5 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["server.mjs", "tests/unit/RouteRegistry.test.mjs"],
+  "project": ["src/**/*.mjs", "tests/**/*.mjs", "server.mjs"]
+}
