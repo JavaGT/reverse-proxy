@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDNS settings · Reverse proxy</title>
+    <script>
+        (function () {
+            var t = localStorage.getItem("mgmt_theme");
+            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        })();
+    </script>
+    <link rel="stylesheet" href="/mgmt.css">
+</head>
+<body>
+    <header class="mgmt-app-bar" role="banner">
+        <div class="mgmt-app-bar-inner">
+            <div class="mgmt-app-brand">
+                <a href="index.html#overview" class="mgmt-app-title">Reverse proxy</a>
+                <span class="mgmt-app-tagline">DDNS (Porkbun) · 127.0.0.1</span>
+            </div>
+            <div class="mgmt-app-tools">
+                <label for="mgmt-secret">Bearer</label>
+                <input type="password" id="mgmt-secret" autocomplete="off" placeholder="if required" size="14">
+                <span class="mgmt-theme-label">Theme</span>
+                <button type="button" class="mgmt-btn mgmt-theme-cycle" id="theme-cycle-btn">System</button>
+                <button type="button" class="mgmt-btn" id="open-help" title="Help (?)">Help</button>
+                <button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all">Refresh</button>
+            </div>
+            <nav class="mgmt-app-nav" aria-label="Page sections">
+                <span class="mgmt-app-nav-main">
+                    <a href="index.html#overview">Overview</a>
+                    <a href="index.html#routes">Routes</a>
+                    <a href="index.html#domains">Domains</a>
+                    <a href="index.html#network">Network</a>
+                    <a href="index.html#scanner">Scanner</a>
+                    <a href="index.html#api">API</a>
+                </span>
+                <span class="mgmt-app-nav-divider" aria-hidden="true">|</span>
+                <span class="mgmt-app-nav-external">
+                    <span class="mgmt-app-nav-current" aria-current="page">DDNS</span>
+                </span>
+            </nav>
+        </div>
+    </header>
+
+    <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
+        <div class="mgmt-help">
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">Network → local addresses</h3>
+                <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
+                <div class="mgmt-table-collapsible mgmt-table-collapsed">
+                    <div class="mgmt-table-collapsible-bar">
+                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-ddns-help">Expand</button>
+                    </div>
+                    <div class="mgmt-table-collapsible-body" id="mgmt-coll-ddns-help">
+                        <div class="mgmt-table-wrap mgmt-help-table-wrap">
+                            <table class="mgmt-table mgmt-help-table">
+                                <thead>
+                                    <tr><th>Column</th><th>Meaning</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
+                                    <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
+                                    <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
+                                    <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">Public IP (Internet)</h3>
+                <p class="mgmt-help-p">IPv4/IPv6 as seen by public HTTPS &ldquo;what is my IP&rdquo; services (egress). This is separate from the local table.</p>
+            </section>
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">DNS resolution</h3>
+                <p class="mgmt-help-p">The Network <strong>DNS</strong> table lists each configured <strong>apex</strong> and a <strong>catch-all</strong> probe per apex (<code>*.apex</code> with the real probe hostname under it; see the table footnote). Route hostnames appear only in <strong>Routes</strong>. <strong>Matches public</strong> marks when a resolved address matches the reported public IP.</p>
+                <p class="mgmt-help-p"><strong>Primary badge on IP addresses:</strong> In Network (DNS IPv4/IPv6 cells, local addresses, and public IP), an IP shown with the primary (highlighted) badge is one this server reports—either a local interface address or the current public IP from the lookup—so that badge means the value resolves or corresponds to <em>this</em> host.</p>
+            </section>
+        </div>
+        <div slot="footer">
+            <button type="button" class="mgmt-btn mgmt-btn-primary" id="help-modal-close">Close</button>
+        </div>
+    </rp-mgmt-modal>
+
+    <div class="mgmt-page">
+        <section id="ddns-settings" class="mgmt-section">
+            <rp-ddns-panel></rp-ddns-panel>
+        </section>
+    </div>
+
+    <script type="module" src="/mgmt-app.mjs"></script>
+</body>
+</html>

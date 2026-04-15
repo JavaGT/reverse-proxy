@@ -1,0 +1,37 @@
+{
+  "name": "@javagt/reverse-proxy-client",
+  "version": "0.1.0",
+  "description": "HTTP and SQLite clients for the reverse-proxy management API",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "bin": {
+    "reverse-proxy-mgmt": "bin/reverse-proxy-mgmt.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "reverse-proxy",
+    "management"
+  ],
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JavaGT/reverse-proxy.git",
+    "directory": "packages/reverse-proxy-client"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md"
+  ]
+}

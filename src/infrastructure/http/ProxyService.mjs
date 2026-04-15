@@ -106,14 +106,14 @@ export class ProxyService {
         });
 
         upstreamReq.on("error", (err) => {
-            log.error({ event: "proxy_upstream_error", error: err.message }, "Upstream connection error");
+            log.error({ event: "proxy_upstream_error", error: err.message }, "Upstream connection error (the server is registered, but it is not responding)");
 
             if (!res.headersSent) {
                 res.writeHead(502, { "Content-Type": "text/plain" });
             }
 
             if (!res.writableEnded) {
-                res.end("Bad gateway");
+                res.end("Bad gateway (the server is registered, but it is not responding)");
             }
         });
 

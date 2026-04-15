@@ -1,25 +1,28 @@
 {
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "dependencies": {
-    "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
-    "pino": "^10.3.1",
-    "pino-http": "^11.0.0"
+    "pino": "^10.3.1"
   },
   "name": "reverse-proxy",
   "version": "1.0.0",
-  "description": "",
+  "description": "Self-hosted HTTPS reverse proxy with SQLite-backed routes and a localhost management API. Includes the @javagt/reverse-proxy-client workspace package (HTTP + SQLite clients, reverse-proxy-mgmt CLI).",
   "main": "server.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.mjs",
-    "secret:rotate": "node scripts/rotate-secret.mjs",
-    "secret:reveal": "node scripts/reveal-secret.mjs"
+    "test": "node --test tests/unit/*.mjs tests/integration/*.mjs packages/reverse-proxy-client/tests/*.mjs",
+    "start": "node server.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "devDependencies": {
     "knip": "^6.3.0",
     "pino-pretty": "^13.1.3"

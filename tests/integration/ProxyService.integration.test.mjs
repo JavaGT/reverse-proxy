@@ -8,7 +8,7 @@ import { logger } from "../../src/shared/utils/Logger.mjs";
 test("ProxyService should block requests from IPs not in allowlist", async (t) => {
     // 1. Setup Registry with a restricted route
     const registry = new RouteRegistry("example.com");
-    registry.reserve("restricted", 3000, { allowlist: ["127.0.0.1"] });
+    registry.reserve("restricted", 3000, { allowlist: ["127.0.0.1"] }, "example.com");
 
     // 2. Setup ProxyService
     const proxyService = new ProxyService(registry, () => ({}), logger);
@@ -41,7 +41,7 @@ test("ProxyService should block requests from IPs not in allowlist", async (t) =
 
 test("ProxyService should return 503 if no healthy targets", async (t) => {
     const registry = new RouteRegistry("example.com");
-    registry.reserve("app", 3000);
+    registry.reserve("app", 3000, {}, "example.com");
     registry.updateTargetHealth("http://localhost:3000", false);
     
     const proxyService = new ProxyService(registry, () => ({}), logger);

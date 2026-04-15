@@ -1,0 +1,978 @@
+openapi: 3.0.3
+info:
+  title: Reverse proxy management API
+  version: "1.0"
+  description: |
+    Local-only control plane (binds to 127.0.0.1). Authenticate with `Authorization: Bearer <secret>` when `MANAGEMENT_SECRET` is set in the server environment.
+
+    **Errors:** All JSON error responses use:
+    `{ "error": { "code": string, "message": string, "details": object | array | null, "resolution"?: string } }`.
+    The optional **`resolution`** field is a short, stable hint for what to do next (auth, schema, env vars, OpenAPI). Unknown error codes still include a generic resolution pointing at this document.
+
+    **Rate limit:** Global per management listener (default 300 requests per 60s; tune with `MANAGEMENT_RATE_LIMIT_MAX` and `MANAGEMENT_RATE_LIMIT_WINDOW_MS`).
+
+    **Health checks:** When `options.healthPath` is set, the proxy GETs that path on each upstream periodically (`HEALTH_CHECK_INTERVAL_MS`) using native `fetch` (http/https). Success is HTTP status 200–399; redirects are not followed; timeout is 5 seconds. Failed probes mark that upstream unhealthy; the route stays registered. The data plane returns 503 when no healthy upstreams remain for the host. Omit `healthPath` to disable monitoring for that route. Each target in `GET /routes` may include `healthCheckedAt` (ISO 8601) after the first probe.
+
+    **Persistence:** Routes are stored in SQLite (`SQLITE_DB_PATH`). **Multi-apex:** apex list may be set in SQLite via `PUT /api/v1/domains` (overrides `ROOT_DOMAINS` env when present). Otherwise use `ROOT_DOMAINS` (comma-separated). **`baseDomain` is always required** on `POST /api/v1/reserve` (each item in a batch) and as a **query parameter** on `DELETE /api/v1/reserve/{subdomain}` so reservations are explicit. **Batch:** send `{ "reservations": [ { "subdomain", "baseDomain", "port" | "ports" | … }, … ] }` to create several mappings in one request (possibly different apexes).
+
+    **Official Node client:** npm package **`@javagt/reverse-proxy-client`** — `createHttpClient({ baseUrl, token })` for this API, optional `createDbClient` / `createAutoClient` against the same SQLite file, CLI **`reverse-proxy-mgmt`**, and `ManagementApiError` for JSON errors. See `GET /llms.txt` and `packages/reverse-proxy-client/README.md` in the server repository.
+
+servers:
+  - url: http://127.0.0.1:{port}
+    description: Management API (localhost only; default port 24789 from MANAGEMENT_INTERFACE_PORT)
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Control plane liveness
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: OK
+  /api/v1/status:
+    get:
+      summary: Alias of /api/v1/health
+      operationId: getStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: OK
+  /api/v1/domains:
+    get:
+      summary: List configured apex domains
+      operationId: listDomains
+      responses:
+        "200":
+          description: Primary and full apex list (from SQLite when configured, else env)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      primary:
+                        type: string
+                      apexDomains:
+                        type: array
+                        items:
+                          type: string
+                      dnsConsole:
+                        nullable: true
+                        type: object
+                      dnsConsoleLinks:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            apex:
+                              type: string
+                            provider:
+                              type: string
+                            label:
+                              type: string
+                            url:
+                              type: string
+                      dnsConsoleProviderIds:
+                        type: array
+                        items:
+                          type: string
+    put:
+      summary: Replace configured apex domains (SQLite)
+      description: |
+        Persists the ordered apex list to SQLite (`meta.root_domains`). First entry is primary.
+        Optional `dnsConsole` selects modular DNS management links (e.g. `porkbun`). All existing routes must remain under a listed apex. Requires localhost and bearer (when configured).
+      operationId: putDomains
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apexDomains]
+              properties:
+                apexDomains:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                dnsConsole:
+                  nullable: true
+                  type: object
+                  properties:
+                    defaultProvider:
+                      nullable: true
+                      type: string
+                    byApex:
+                      type: object
+                      additionalProperties:
+                        nullable: true
+                        type: string
+      responses:
+        "200":
+          description: Updated primary and apex list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      primary:
+                        type: string
+                      apexDomains:
+                        type: array
+                        items:
+                          type: string
+                      dnsConsole:
+                        nullable: true
+                        type: object
+                      dnsConsoleLinks:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          description: Validation or route conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/routes:
+    get:
+      summary: List all routes (persistent and ephemeral)
+      description: |
+        No bearer required for the route itself; the listener is only reachable on localhost.
+        There is no per-client “ownership”; one shared secret applies when mutating routes.
+      operationId: listRoutes
+      responses:
+        "200":
+          description: Route list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RouteEntry"
+  /api/v1/network:
+    get:
+      summary: Local/public IPs and DNS snapshot
+      description: |
+        Non-loopback interface addresses, public IPv4/IPv6 from HTTPS IP discovery (same services as optional DDNS),
+        and DNS A/AAAA lookups for each configured apex plus a catch-all probe hostname per apex (`rp-wc-<hex>.<apex>`).
+        Route hostnames are not included (see `GET /api/v1/routes`). Compare `matchesPublicIpv*` to see if resolved addresses include the reported public IP.
+        Includes an optional HTTPS self-probe to each reported public address on the ingress port (default 443, env `PUBLIC_INGRESS_PROBE_HTTPS_PORT`) with certificate verification disabled for that probe only, plus a `cgnatNote` when no public IPv4 was discovered.
+      operationId: getNetwork
+      responses:
+        "200":
+          description: Snapshot (see `generatedAt`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/NetworkStatus"
+        "500":
+          description: Unexpected failure building the report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/ddns:
+    get:
+      summary: Porkbun DDNS status
+      description: |
+        Reads the `meta.ddns` document in SQLite when present; otherwise returns an unconfigured summary (`configSource: none`).
+        The background scheduler uses only SQLite—environment variables are not used for DDNS.
+        API keys are never returned in JSON—only whether credentials appear configured. Includes `cachedPublicIp`
+        from SQLite after a successful sync when persistence exposes the database.
+      operationId: getDdns
+      responses:
+        "200":
+          description: Current DDNS summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DdnsStatus"
+        "500":
+          description: Unexpected failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Save Porkbun DDNS settings to SQLite
+      description: |
+        Persists DDNS to `meta.ddns` (includes API secrets—protect database backups). The background scheduler
+        reads this row each cycle, so changes apply without restarting the process. Omit `porkbunApiKey` /
+        `porkbunSecretKey` or send empty strings to keep existing stored keys on update.
+        Requires localhost and bearer when `MANAGEMENT_SECRET` is set.
+      operationId: putDdns
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DdnsPutRequest"
+      responses:
+        "200":
+          description: Saved; returns same shape as GET `data`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DdnsStatus"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Persistence is not SQLite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Remove saved DDNS settings from SQLite
+      description: |
+        Deletes `meta.ddns`; DDNS stays off until configured again with `PUT`. Does not erase the
+        public IP cache row. Requires localhost and bearer when `MANAGEMENT_SECRET` is set.
+      operationId: deleteDdns
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Cleared; returns same shape as GET `data` (unconfigured until saved again)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DdnsStatus"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Persistence is not SQLite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/openapi.yaml:
+    get:
+      summary: OpenAPI document (this file)
+      description: Same YAML is also served at `GET /openapi.yaml` on the management host (root).
+      operationId: getOpenApiV1
+      responses:
+        "200":
+          description: YAML document
+          content:
+            application/yaml:
+              schema:
+                type: string
+        "500":
+          description: Failed to read spec from disk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /openapi.yaml:
+    get:
+      summary: OpenAPI document (alias at site root)
+      description: Identical to `GET /api/v1/openapi.yaml`.
+      operationId: getOpenApiRoot
+      responses:
+        "200":
+          description: YAML document
+          content:
+            application/yaml:
+              schema:
+                type: string
+        "500":
+          description: Failed to read spec from disk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/scan:
+    post:
+      summary: Scan a TCP port range on localhost
+      description: |
+        Discovers listening ports in `[start, end]` (inclusive). Default range 3000–4000.
+        Requires `end - start` between **1** and **10,000** (so a zero-width range is rejected).
+        Optional `concurrency` (default 100) controls parallel connect attempts.
+      operationId: scanPorts
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortScanRequest"
+            examples:
+              default:
+                summary: Default range
+                value: {}
+              narrow:
+                summary: Custom inclusive range
+                value: { start: 24789, end: 24799, concurrency: 50 }
+      responses:
+        "200":
+          description: Open ports with best-effort process metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PortScanResponse"
+        "400":
+          description: Invalid range or body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Scan failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/process/{port}:
+    delete:
+      summary: Terminate a process listening on a TCP port
+      description: |
+        Sends OS-specific signals to the listener on `port`. Returns 404 if nothing is listening.
+        Path `port` must be an integer; non-numeric paths yield `INVALID_PORT`.
+      operationId: killProcess
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: port
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 65535
+      responses:
+        "200":
+          description: Process terminated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    required: [message]
+                    properties:
+                      message:
+                        type: string
+        "400":
+          description: Invalid port in path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No listening process on that port
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Kill failed (permissions, race, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/reserve:
+    post:
+      summary: Reserve a subdomain to upstream target(s)
+      description: |
+        Single mapping or batch: if the body contains a `reservations` array, each entry is reserved in order (same validation as a single call); on conflict or error after partial success, created items are rolled back.
+        Idempotent: repeating the same subdomain, `baseDomain`, targets, and options returns 200 with the same mapping.
+        Conflicting reservations return 409 `SUBDOMAIN_CONFLICT` (not 401).
+      operationId: reserve
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReserveRequest"
+      responses:
+        "200":
+          description: Idempotent replay; mapping unchanged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/ReserveResponse"
+                      - $ref: "#/components/schemas/ReserveBatchResponse"
+        "201":
+          description: Created or replaced an existing replaceable route (or batch with at least one created item)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/ReserveResponse"
+                      - $ref: "#/components/schemas/ReserveBatchResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Subdomain held by a healthy service that cannot be replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/reserve/{subdomain}:
+    delete:
+      summary: Release a reserved subdomain
+      operationId: release
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: subdomain
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: baseDomain
+          in: query
+          required: true
+          description: Apex FQDN for the mapping to release
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Released
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    DdnsPutRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        porkbunApiKey:
+          type: string
+          description: Omit or empty to keep previous value when updating an existing row.
+        porkbunSecretKey:
+          type: string
+          description: Omit or empty to keep previous value when updating an existing row.
+        domainMode:
+          type: string
+          enum: [apex, explicit]
+          description: "`apex` uses configured registry apex domains at each sync; `explicit` uses `domains`."
+        domains:
+          type: array
+          items:
+            type: string
+          description: Required when `domainMode` is `explicit` (apex FQDNs).
+        matchNote:
+          type: string
+          description: Porkbun DNS record note filter; default when omitted on first save.
+        intervalMs:
+          type: integer
+          minimum: 10000
+          maximum: 86400000
+        ipLookupTimeoutMs:
+          type: integer
+          minimum: 1000
+          maximum: 120000
+        ipv4Services:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Optional HTTP(S) URLs tried in order for IPv4 discovery; omit to keep previous or defaults.
+        ipv6Services:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Optional HTTP(S) URLs for IPv6 discovery.
+        porkbunApiBaseUrl:
+          type: string
+          format: uri
+          description: Optional Porkbun JSON API v3 base URL; default official endpoint when omitted.
+    DdnsStatus:
+      type: object
+      required:
+        - provider
+        - configSource
+        - configInvalid
+        - enabled
+        - credentialsConfigured
+        - domains
+        - domainListSource
+        - matchNote
+        - intervalMs
+        - ipLookupTimeoutMs
+        - ipv4Services
+        - ipv6Services
+        - porkbunApiBaseUrl
+        - schedulerWouldRun
+        - schedulerState
+      properties:
+        provider:
+          type: string
+          example: porkbun
+        configSource:
+          type: string
+          enum: [none, sqlite]
+        configInvalid:
+          type: boolean
+          description: True when a SQLite `ddns` row exists but failed validation (scheduler skips until fixed).
+        configInvalidMessage:
+          nullable: true
+          type: string
+        domainMode:
+          nullable: true
+          type: string
+          enum: [apex, explicit]
+          description: Set when `configSource` is `sqlite`; null when unconfigured (`none`).
+        enabled:
+          type: boolean
+        credentialsConfigured:
+          type: boolean
+        domains:
+          type: array
+          items:
+            type: string
+        domainListSource:
+          type: string
+          enum: [NONE, STORED_EXPLICIT, STORED_APEX]
+        matchNote:
+          type: string
+        intervalMs:
+          type: integer
+        ipLookupTimeoutMs:
+          type: integer
+        ipv4Services:
+          type: array
+          items:
+            type: string
+        ipv6Services:
+          type: array
+          items:
+            type: string
+        porkbunApiBaseUrl:
+          type: string
+        schedulerWouldRun:
+          type: boolean
+        schedulerState:
+          type: string
+          enum: [running, disabled, missing_credentials, no_domains, not_configured]
+        cachedPublicIp:
+          nullable: true
+          type: object
+          properties:
+            ipv4:
+              nullable: true
+              type: string
+            ipv6:
+              nullable: true
+              type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable code (e.g. UNAUTHORIZED, SUBDOMAIN_CONFLICT).
+            message:
+              type: string
+            details:
+              nullable: true
+              oneOf:
+                - type: object
+                - type: array
+            resolution:
+              type: string
+              description: Optional actionable next step for operators and automation.
+    PortScanRequest:
+      type: object
+      properties:
+        start:
+          type: integer
+          description: First port (inclusive). Default 3000.
+        end:
+          type: integer
+          description: Last port (inclusive). Default 4000.
+        concurrency:
+          type: integer
+          description: Parallel connection attempts. Default 100.
+    PortScanResponse:
+      type: object
+      required: [openPorts]
+      properties:
+        openPorts:
+          type: array
+          items:
+            type: object
+            required: [port, process]
+            properties:
+              port:
+                type: integer
+              process:
+                type: object
+                properties:
+                  command:
+                    type: string
+                  pid:
+                    oneOf:
+                      - type: string
+                      - type: integer
+    ReserveRequest:
+      oneOf:
+        - $ref: "#/components/schemas/SingleReserveRequest"
+        - $ref: "#/components/schemas/BatchReserveRequest"
+    SingleReserveRequest:
+      allOf:
+        - type: object
+          required: [subdomain, baseDomain]
+          properties:
+            subdomain:
+              type: string
+              description: Single DNS label (left of the apex)
+            baseDomain:
+              type: string
+              description: Apex FQDN (must be one of the configured apex domains)
+            port:
+              type: integer
+            ports:
+              type: array
+              items:
+                type: integer
+            target:
+              type: string
+              description: Single upstream URL
+            targets:
+              type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: object
+            options:
+              type: object
+              properties:
+                healthPath:
+                  type: string
+                  description: Must start with /, max 256 chars, no whitespace or //
+                allowlist:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional client IP allowlist for the route
+        - oneOf:
+            - required: [port]
+            - required: [ports]
+            - required: [target]
+            - required: [targets]
+    BatchReserveRequest:
+      type: object
+      required: [reservations]
+      properties:
+        reservations:
+          type: array
+          minItems: 1
+          description: Each element uses the same shape as a single reserve body (subdomain, baseDomain, port | ports | target | targets, optional options)
+          items:
+            $ref: "#/components/schemas/SingleReserveRequest"
+    ReserveBatchResponse:
+      type: object
+      required: [batch, results]
+      properties:
+        batch:
+          type: boolean
+          example: true
+        results:
+          type: array
+          items:
+            type: object
+            required: [outcome, data]
+            properties:
+              outcome:
+                type: string
+                enum: [created, unchanged]
+              data:
+                $ref: "#/components/schemas/ReserveResponse"
+    ReserveResponse:
+      type: object
+      properties:
+        host:
+          type: string
+          example: my-app.{{rootDomain}}
+        baseDomain:
+          type: string
+          example: {{rootDomain}}
+        rootDomain:
+          type: string
+          example: {{rootDomain}}
+        publicUrl:
+          type: string
+          description: Preferred public URL (HTTPS by default)
+          example: https://my-app.{{rootDomain}}
+        publicUrlHttp:
+          type: string
+          example: http://my-app.{{rootDomain}}
+        targets:
+          type: array
+          items:
+            type: object
+        options:
+          type: object
+    NetworkStatus:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        localAddresses:
+          type: array
+          items:
+            type: object
+            properties:
+              interface:
+                type: string
+              address:
+                type: string
+              family:
+                type: string
+                enum: [IPv4, IPv6]
+              internal:
+                type: boolean
+        publicIp:
+          type: object
+          properties:
+            ipv4:
+              type: string
+              nullable: true
+            ipv6:
+              type: string
+              nullable: true
+        publicIngressSelfCheck:
+          type: object
+          description: HTTPS GET from this server to its own reported public IP(s) on the ingress probe port (hairpin / port-forward hint).
+          properties:
+            port:
+              type: integer
+              description: TCP port probed (default 443; override with `PUBLIC_INGRESS_PROBE_HTTPS_PORT`).
+            ipv4:
+              type: object
+              nullable: true
+              description: Omitted as null when no public IPv4 was discovered.
+              properties:
+                ok:
+                  type: boolean
+                statusCode:
+                  type: integer
+                  nullable: true
+                error:
+                  type: string
+                  nullable: true
+                url:
+                  type: string
+            ipv6:
+              type: object
+              nullable: true
+              description: Omitted as null when no public IPv6 was discovered.
+              properties:
+                ok:
+                  type: boolean
+                statusCode:
+                  type: integer
+                  nullable: true
+                error:
+                  type: string
+                  nullable: true
+                url:
+                  type: string
+        cgnatNote:
+          type: string
+          nullable: true
+          description: Present when no public IPv4 was discovered; explains CGNAT as a common cause.
+        dns:
+          type: object
+          properties:
+            wildcardProbeToken:
+              type: string
+              description: Label segment used in catch-all probe hostnames (`<token>.<apex>`).
+            rows:
+              type: array
+              items:
+                $ref: "#/components/schemas/DnsReportRow"
+    DnsReportRow:
+      type: object
+      properties:
+        rowKind:
+          type: string
+          enum: [apex, wildcard]
+        label:
+          type: string
+        displayName:
+          type: string
+        queryName:
+          type: string
+          description: For `wildcard` rows, the one-off probe FQDN queried for that apex (also shown in the management UI under `*.apex`).
+        ipv4:
+          type: array
+          items:
+            type: string
+        ipv6:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+        matchesPublicIpv4:
+          type: boolean
+        matchesPublicIpv6:
+          type: boolean
+    RouteTarget:
+      type: object
+      properties:
+        url:
+          type: string
+        healthy:
+          type: boolean
+        healthCheckedAt:
+          type: string
+          format: date-time
+          description: Present when `options.healthPath` is set; time of the last completed probe for this upstream.
+    RouteEntry:
+      type: object
+      properties:
+        host:
+          type: string
+        type:
+          type: string
+          enum: [persistent, ephemeral]
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteTarget"
+        options:
+          type: object
+        baseDomain:
+          type: string
+        rootDomain:
+          type: string
+        publicUrl:
+          type: string
+        publicUrlHttp:
+          type: string

@@ -1,154 +1,440 @@
-import { generateSecret, writeSecretFile } from "../shared/utils/SecretUtils.mjs";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PortScanner } from "../shared/utils/PortScanner.mjs";
 import { ProcessInfoProvider } from "../shared/utils/ProcessInfoProvider.mjs";
+import { sendJsonError } from "../shared/utils/JsonError.mjs";
+import { resolutionForManagementError } from "./managementErrorResolutions.mjs";
+import { normalizeReserveOptions, ReserveValidationError } from "../shared/utils/ReserveOptions.mjs";
+import { listDnsConsoleProviderIds } from "../infrastructure/dns/console/DnsConsoleRegistry.mjs";
+import {
+    assertValidDnsConsoleConfig,
+    normalizeDnsConsoleInput,
+    resolveDnsConsoleLinks
+} from "../infrastructure/dns/console/resolveConsoleLinks.mjs";
+import { collectNetworkStatus } from "../infrastructure/network/networkStatus.mjs";
+import { buildDdnsPublicSummary, mergePutDdnsBody } from "../ddns/ddnsConfigResolve.mjs";
+import { SqliteIpCache } from "../ddns/infrastructure/adapters/SqliteIpCache.mjs";
+import { isValidApexFQDN } from "../shared/utils/isValidApexFqdn.mjs";
+import {
+    parseReservationTargets,
+    reserveWithRegistryOutcome,
+    subdomainConflictMessage
+} from "./reservationOps.mjs";
+
+function sendApiError(res, status, code, message, details = null) {
+    return sendJsonError(res, status, code, message, details, resolutionForManagementError(code));
+}
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * SRP: Contains the business logic for management API routes.
- * RESTful: Supports HA with multi-target reservation and secure secret rotation.
+ * RESTful: Supports HA with multi-target reservation.
  */
 export class ManagementController {
     #registry;
     #persistence;
     #logger;
-    #secretFile;
+    #managementSecret;
+    #publicUrlHttpsPrefix;
+    #publicUrlHttpPrefix;
+    /** @type {(() => void) | null} */
+    #onRootDomainsUpdated;
 
-    constructor(registry, persistence, logger, secretFile = null) {
+    constructor(registry, persistence, logger, managementSecret = null, publicUrls = null) {
         this.#registry = registry;
         this.#persistence = persistence;
         this.#logger = logger;
-        this.#secretFile = secretFile;
+        this.#managementSecret = managementSecret;
+        this.#publicUrlHttpsPrefix = publicUrls?.publicUrlHttpsPrefix ?? "https";
+        this.#publicUrlHttpPrefix = publicUrls?.publicUrlHttpPrefix ?? "http";
+        this.#onRootDomainsUpdated = publicUrls?.onRootDomainsUpdated ?? null;
     }
 
     get registry() {
         return this.#registry;
     }
 
+    #publicFieldsForHost(host) {
+        const baseDomain = this.#registry.baseDomainForHost(host);
+        return {
+            baseDomain,
+            rootDomain: baseDomain,
+            publicUrl: `${this.#publicUrlHttpsPrefix}://${host}`,
+            publicUrlHttp: `${this.#publicUrlHttpPrefix}://${host}`
+        };
+    }
+
+    getDomains(req, res) {
+        const apexDomains = this.#registry.getRootDomains();
+        const cfg = this.#persistence.getRootDomainConfig?.() ?? null;
+        const dnsConsole = cfg?.dnsConsole ?? null;
+        const dnsConsoleLinks = resolveDnsConsoleLinks(apexDomains, dnsConsole ?? undefined);
+
+        res.status(200).json({
+            data: {
+                primary: this.#registry.rootDomain,
+                apexDomains,
+                dnsConsole,
+                dnsConsoleLinks,
+                dnsConsoleProviderIds: listDnsConsoleProviderIds()
+            }
+        });
+    }
+
+    async putDomains(req, res) {
+        try {
+            const apexDomains = req.body?.apexDomains;
+            if (!Array.isArray(apexDomains)) {
+                return sendApiError(res, 400, "INVALID_REQUEST", "apexDomains must be an array", null);
+            }
+
+            const normalized = [];
+            const seen = new Set();
+            for (const d of apexDomains) {
+                const x = String(d ?? "")
+                    .trim()
+                    .toLowerCase();
+                if (!x || seen.has(x)) continue;
+                if (!isValidApexFQDN(x)) {
+                    return sendApiError(res, 400, "INVALID_REQUEST", `Invalid apex domain: ${d}`, null);
+                }
+                seen.add(x);
+                normalized.push(x);
+            }
+
+            if (normalized.length === 0) {
+                return sendApiError(res, 400, "INVALID_REQUEST", "At least one unique apex domain is required", null);
+            }
+
+            try {
+                this.#registry.setRootDomains(normalized);
+            } catch (err) {
+                return sendApiError(res, 400, "DOMAIN_CONFLICT", err.message, null);
+            }
+
+            let nextDnsConsole;
+            if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "dnsConsole")) {
+                const raw = req.body.dnsConsole;
+                if (raw === null) {
+                    nextDnsConsole = null;
+                } else {
+                    const norm = normalizeDnsConsoleInput(raw);
+                    if (norm === null && raw != null && typeof raw === "object") {
+                        return sendApiError(res, 400, "INVALID_REQUEST", "Invalid dnsConsole shape", null);
+                    }
+                    if (norm) {
+                        try {
+                            assertValidDnsConsoleConfig(norm);
+                        } catch (e) {
+                            return sendApiError(res, 400, "INVALID_REQUEST", e.message, null);
+                        }
+                    }
+                    nextDnsConsole = norm;
+                }
+            } else {
+                nextDnsConsole = this.#persistence.getRootDomainConfig?.()?.dnsConsole;
+            }
+
+            try {
+                await this.#persistence.saveRootDomainConfig({
+                    apexDomains: normalized,
+                    dnsConsole: nextDnsConsole
+                });
+                await this.#persistence.save(this.#registry.getPersistentRoutes());
+            } catch (persistErr) {
+                this.#logger.error(
+                    { event: "mgmt_put_domains_persist_error", error: persistErr.message },
+                    "Failed to persist apex domains"
+                );
+                return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            }
+
+            this.#onRootDomainsUpdated?.();
+
+            const apexAfter = this.#registry.getRootDomains();
+            const persisted = this.#persistence.getRootDomainConfig?.() ?? null;
+            res.status(200).json({
+                data: {
+                    primary: this.#registry.rootDomain,
+                    apexDomains: apexAfter,
+                    dnsConsole: persisted?.dnsConsole ?? null,
+                    dnsConsoleLinks: resolveDnsConsoleLinks(apexAfter, persisted?.dnsConsole ?? undefined),
+                    dnsConsoleProviderIds: listDnsConsoleProviderIds()
+                }
+            });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_put_domains_error", error: error.message }, "putDomains failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    #enrichReservationPayload(result) {
+        return { ...result, ...this.#publicFieldsForHost(result.host) };
+    }
+
     async getRoutes(req, res) {
         this.#logger.info({ event: "mgmt_get_routes" }, "Listing all routes");
-        res.status(200).json({ data: this.#registry.getAllRoutes() });
+        const routes = this.#registry.getAllRoutes().map(r => ({
+            ...r,
+            ...this.#publicFieldsForHost(r.host)
+        }));
+        res.status(200).json({ data: routes });
     }
 
     async reserve(req, res) {
         try {
-            const { subdomain, port, ports, targets, target, options } = req.body;
-            
-            let reservationTargets = targets;
-            if (!reservationTargets) {
-              if (ports) {
-                reservationTargets = ports; 
-              } else if (port) {
-                reservationTargets = [port];
-              } else if (target) {
-                reservationTargets = [target];
-              }
+            if (Array.isArray(req.body?.reservations)) {
+                return await this.#reserveBatch(req, res);
             }
 
+            let normalizedOptions;
+            try {
+                normalizedOptions = normalizeReserveOptions(req.body?.options);
+            } catch (e) {
+                if (e instanceof ReserveValidationError) {
+                    return sendApiError(res, 400, e.code, e.message, null);
+                }
+                throw e;
+            }
+
+            const { subdomain, baseDomain } = req.body;
+            if (baseDomain == null || String(baseDomain).trim() === "") {
+                return sendApiError(res, 400, "INVALID_REQUEST", "baseDomain is required", null);
+            }
+
+            if (subdomain == null || String(subdomain).trim() === "") {
+                return sendApiError(res, 400, "INVALID_REQUEST", "subdomain is required", null);
+            }
+
+            const reservationTargets = parseReservationTargets(req.body);
             if (!reservationTargets || (Array.isArray(reservationTargets) && reservationTargets.length === 0)) {
-               return res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Targets, ports, or target is required" } });
+                return sendApiError(res, 400, "INVALID_REQUEST", "Targets, ports, or target is required", null);
             }
 
-            let result;
-            if (typeof reservationTargets[0] === "number") {
-                result = this.#registry.reserve(subdomain, reservationTargets, options);
-            } else {
-                const host = `${subdomain.trim().toLowerCase()}.${this.#registry.rootDomain}`;
-                result = this.#registry.registerPersistentRoute(host, reservationTargets, options);
+            const outcome = reserveWithRegistryOutcome(
+                this.#registry,
+                subdomain,
+                String(baseDomain).trim().toLowerCase(),
+                normalizedOptions,
+                reservationTargets
+            );
+
+            if (outcome.outcome === "conflict") {
+                return sendApiError(res, 409, "SUBDOMAIN_CONFLICT", subdomainConflictMessage(outcome), {
+                    host: outcome.host,
+                    reason: outcome.reason
+                });
             }
-            
-            this.#logger.info({ event: "mgmt_reserve", host: result.host }, `Reserved ${result.host} with ${result.targets.length} target(s)`);
-            await this.#persistence.save(this.#registry.getPersistentRoutes());
-            
-            res.status(201).json({ data: result });
+
+            const payload = this.#enrichReservationPayload(outcome.data);
+
+            if (outcome.outcome === "unchanged") {
+                this.#logger.info({ event: "mgmt_reserve_idempotent", host: payload.host }, `Idempotent reserve for ${payload.host}`);
+                return res.status(200).json({ data: payload });
+            }
+
+            this.#logger.info(
+                { event: "mgmt_reserve", host: payload.host },
+                `Reserved ${payload.host} with ${payload.targets.length} target(s)`
+            );
+            try {
+                await this.#persistence.save(this.#registry.getPersistentRoutes());
+            } catch (persistErr) {
+                this.#logger.error(
+                    { event: "mgmt_reserve_persist_error", error: persistErr.message },
+                    "Failed to persist routes after reserve"
+                );
+                return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            }
+
+            res.status(201).json({ data: payload });
         } catch (error) {
             this.#logger.error({ event: "mgmt_reserve_error", error: error.message }, "Reservation failed");
-            res.status(400).json({ 
-                error: { 
-                    code: "RESERVATION_FAILED", 
-                    message: error.message 
-                } 
-            });
+            if (error instanceof ReserveValidationError) {
+                return sendApiError(res, 400, error.code, error.message, null);
+            }
+            if (error.message.includes("is not configured") && error.message.includes("allowed:")) {
+                return sendApiError(res, 400, "INVALID_REQUEST", error.message, null);
+            }
+            sendApiError(res, 400, "RESERVATION_FAILED", error.message, null);
         }
+    }
+
+    #rollbackReserveBatch(createdStack) {
+        for (const { subdomain, baseDomain } of createdStack.slice().reverse()) {
+            try {
+                this.#registry.release(subdomain, baseDomain);
+            } catch (err) {
+                this.#logger.error(
+                    { event: "mgmt_batch_rollback_error", subdomain, baseDomain, error: err.message },
+                    "Batch rollback release failed"
+                );
+            }
+        }
+    }
+
+    async #reserveBatch(req, res) {
+        const items = req.body?.reservations;
+        if (!Array.isArray(items) || items.length === 0) {
+            return sendApiError(res, 400, "INVALID_REQUEST", "reservations must be a non-empty array", null);
+        }
+
+        const createdStack = [];
+        const results = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i] ?? {};
+
+            let normalizedOptions;
+            try {
+                normalizedOptions = normalizeReserveOptions(item.options);
+            } catch (e) {
+                this.#rollbackReserveBatch(createdStack);
+                if (e instanceof ReserveValidationError) {
+                    return sendApiError(res, 400, e.code, `reservations[${i}]: ${e.message}`, null);
+                }
+                throw e;
+            }
+
+            const baseDomainRaw = item.baseDomain;
+            if (baseDomainRaw == null || String(baseDomainRaw).trim() === "") {
+                this.#rollbackReserveBatch(createdStack);
+                return sendApiError(res, 400, "INVALID_REQUEST", `reservations[${i}]: baseDomain is required`, null);
+            }
+            const baseDomain = String(baseDomainRaw).trim().toLowerCase();
+
+            if (item.subdomain == null || String(item.subdomain).trim() === "") {
+                this.#rollbackReserveBatch(createdStack);
+                return sendApiError(res, 400, "INVALID_REQUEST", `reservations[${i}]: subdomain is required`, null);
+            }
+
+            const reservationTargets = parseReservationTargets(item);
+            if (!reservationTargets || (Array.isArray(reservationTargets) && reservationTargets.length === 0)) {
+                this.#rollbackReserveBatch(createdStack);
+                return sendApiError(
+                    res,
+                    400,
+                    "INVALID_REQUEST",
+                    `reservations[${i}]: targets, ports, or target is required`,
+                    null
+                );
+            }
+
+            let outcome;
+            try {
+                outcome = reserveWithRegistryOutcome(
+                    this.#registry,
+                    item.subdomain,
+                    baseDomain,
+                    normalizedOptions,
+                    reservationTargets
+                );
+            } catch (err) {
+                this.#rollbackReserveBatch(createdStack);
+                if (err.message.includes("is not configured") && err.message.includes("allowed:")) {
+                    return sendApiError(res, 400, "INVALID_REQUEST", `reservations[${i}]: ${err.message}`, null);
+                }
+                return sendApiError(res, 400, "RESERVATION_FAILED", `reservations[${i}]: ${err.message}`, null);
+            }
+
+            if (outcome.outcome === "conflict") {
+                this.#rollbackReserveBatch(createdStack);
+                return sendApiError(res, 409, "SUBDOMAIN_CONFLICT", subdomainConflictMessage(outcome), {
+                    host: outcome.host,
+                    reason: outcome.reason,
+                    index: i
+                });
+            }
+
+            const payload = this.#enrichReservationPayload(outcome.data);
+            results.push({ outcome: outcome.outcome, data: payload });
+
+            if (outcome.outcome === "created") {
+                createdStack.push({ subdomain: item.subdomain, baseDomain });
+            }
+        }
+
+        try {
+            await this.#persistence.save(this.#registry.getPersistentRoutes());
+        } catch (persistErr) {
+            this.#logger.error(
+                { event: "mgmt_reserve_batch_persist_error", error: persistErr.message },
+                "Failed to persist batch reservations"
+            );
+            this.#rollbackReserveBatch(createdStack);
+            return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+        }
+
+        const anyCreated = results.some(r => r.outcome === "created");
+        res.status(anyCreated ? 201 : 200).json({ data: { batch: true, results } });
     }
 
     async release(req, res) {
         try {
             const { subdomain } = req.params;
-            const result = this.#registry.release(subdomain);
-            
+            const baseDomain = req.query.baseDomain;
+            if (baseDomain == null || String(baseDomain).trim() === "") {
+                return sendApiError(res, 400, "INVALID_REQUEST", "baseDomain query parameter is required", null);
+            }
+
+            const result = this.#registry.release(subdomain, baseDomain);
+
             if (!result) {
-                return res.status(404).json({ 
-                    error: { 
-                        code: "ROUTE_NOT_FOUND", 
-                        message: "Route not found" 
-                    } 
-                });
+                return sendApiError(res, 404, "ROUTE_NOT_FOUND", "Route not found", null);
             }
 
             this.#logger.info({ event: "mgmt_release", host: result.host }, `Released ${result.host}`);
-            await this.#persistence.save(this.#registry.getPersistentRoutes());
-            
-            res.status(200).json({ data: result });
+            try {
+                await this.#persistence.save(this.#registry.getPersistentRoutes());
+            } catch (persistErr) {
+                this.#logger.error(
+                    { event: "mgmt_release_persist_error", error: persistErr.message },
+                    "Failed to persist routes after release"
+                );
+                return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            }
+
+            res.status(200).json({ data: { ...result, ...this.#publicFieldsForHost(result.host) } });
         } catch (error) {
             this.#logger.error({ event: "mgmt_release_error", error: error.message }, "Release failed");
-            res.status(400).json({ 
-                error: { 
-                    code: "RELEASE_FAILED", 
-                    message: error.message 
-                } 
-            });
-        }
-    }
-
-    async rotateSecret(req, res) {
-        if (!this.#secretFile) {
-            return res.status(400).json({ error: { code: "CONFIGURATION_ERROR", message: "No secret file configured to rotate" } });
-        }
-
-        try {
-            const newSecret = generateSecret();
-            writeSecretFile(this.#secretFile, newSecret);
-            
-            this.#logger.warn({ event: "mgmt_secret_rotated" }, "Management secret rotated via API");
-            
-            res.status(200).json({ 
-                data: { 
-                    message: "Secret rotated successfully", 
-                    newSecret 
-                } 
-            });
-        } catch (error) {
-            this.#logger.error({ event: "mgmt_rotate_error", error: error.message }, "Secret rotation failed");
-            res.status(500).json({ error: { code: "ROTATION_FAILED", message: error.message } });
+            if (error.message.includes("baseDomain is required")) {
+                return sendApiError(res, 400, "INVALID_REQUEST", error.message, null);
+            }
+            sendApiError(res, 400, "RELEASE_FAILED", error.message, null);
         }
     }
 
     async scanPorts(req, res) {
         try {
             const { start = 3000, end = 4000, concurrency = 100 } = req.body;
-            
-            // Limit range to prevent abuse
+
             const rangeSize = end - start;
             if (rangeSize < 0 || rangeSize > 10000) {
-                return res.status(400).json({ error: { code: "INVALID_RANGE", message: "Scan range must be between 1 and 10,000 ports" } });
+                return sendApiError(res, 400, "INVALID_RANGE", "Scan range must be between 1 and 10,000 ports", null);
             }
 
             this.#logger.info({ event: "mgmt_port_scan_start", start, end }, `Starting port scan from ${start} to ${end}`);
-            
+
             const scanner = new PortScanner(concurrency);
             const openPorts = await scanner.scanRange(start, end);
             const processMap = ProcessInfoProvider.getListeningProcesses();
-            
+
             const results = openPorts.map(port => ({
                 port,
                 process: processMap.get(port) || { command: "unknown", pid: "unknown" }
             }));
-            
-            this.#logger.info({ event: "mgmt_port_scan_complete", count: results.length }, `Port scan complete. Found ${results.length} open port(s)`);
-            
+
+            this.#logger.info(
+                { event: "mgmt_port_scan_complete", count: results.length },
+                `Port scan complete. Found ${results.length} open port(s)`
+            );
+
             res.status(200).json({ data: { openPorts: results } });
         } catch (error) {
             this.#logger.error({ event: "mgmt_scan_error", error: error.message }, "Port scan failed");
-            res.status(500).json({ error: { code: "SCAN_FAILED", message: error.message } });
+            sendApiError(res, 500, "SCAN_FAILED", error.message, null);
         }
     }
 
@@ -156,31 +442,173 @@ export class ManagementController {
         try {
             const port = parseInt(req.params.port, 10);
             if (isNaN(port)) {
-                return res.status(400).json({ error: { code: "INVALID_PORT", message: "Invalid port number" } });
+                return sendApiError(res, 400, "INVALID_PORT", "Invalid port number", null);
             }
 
             this.#logger.warn({ event: "mgmt_kill_process", port }, `Attempting to kill process on port ${port}`);
-            
+
             const killed = ProcessInfoProvider.killProcessByPort(port);
-            
+
             if (killed) {
                 this.#logger.info({ event: "mgmt_kill_success", port }, `Successfully killed process on port ${port}`);
                 res.status(200).json({ data: { message: `Process on port ${port} terminated` } });
             } else {
-                res.status(404).json({ error: { code: "PROCESS_NOT_FOUND", message: `No listening process found on port ${port}` } });
+                sendApiError(res, 404, "PROCESS_NOT_FOUND", `No listening process found on port ${port}`, null);
             }
         } catch (error) {
             this.#logger.error({ event: "mgmt_kill_error", port: req.params.port, error: error.message }, "Failed to kill process");
-            res.status(500).json({ 
-                error: { 
-                    code: "KILL_FAILED", 
-                    message: error.message 
-                } 
-            });
+            sendApiError(res, 500, "KILL_FAILED", error.message, null);
         }
     }
 
     getHealth(req, res) {
         res.status(200).json({ data: { status: "OK" } });
+    }
+
+    async getNetwork(req, res) {
+        try {
+            const data = await collectNetworkStatus(this.#registry);
+            res.status(200).json({ data });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_network_error", error: error.message }, "Network status failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    /**
+     * DDNS summary from SQLite `meta.ddns` when present; otherwise unconfigured. Secrets are never returned.
+     */
+    async getDdns(req, res) {
+        try {
+            const stored =
+                typeof this.#persistence.getDdnsSettings === "function" ? this.#persistence.getDdnsSettings() : null;
+            const summary = buildDdnsPublicSummary({
+                getApexDomains: () => this.#registry.getRootDomains(),
+                stored
+            });
+
+            let cachedPublicIp = null;
+            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
+            if (typeof getDb === "function") {
+                try {
+                    const cache = new SqliteIpCache(getDb());
+                    const ip = await cache.read();
+                    cachedPublicIp = ip ? ip.toJSON() : null;
+                } catch (err) {
+                    this.#logger.warn({ event: "mgmt_ddns_cache_read_error", error: err.message }, "DDNS cache read failed");
+                }
+            }
+
+            res.status(200).json({
+                data: {
+                    ...summary,
+                    cachedPublicIp
+                }
+            });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_ddns_error", error: error.message }, "DDNS summary failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    async putDdns(req, res) {
+        if (typeof this.#persistence.getDdnsSettings !== "function" || typeof this.#persistence.saveDdnsSettings !== "function") {
+            return sendApiError(res, 501, "NOT_IMPLEMENTED", "DDNS settings require SQLite persistence", null);
+        }
+        try {
+            const prev = this.#persistence.getDdnsSettings();
+            const merged = mergePutDdnsBody(prev, req.body, isValidApexFQDN);
+            if (!merged.ok) {
+                return sendApiError(res, 400, "INVALID_REQUEST", merged.message, null);
+            }
+            this.#persistence.saveDdnsSettings(merged.value);
+            this.#logger.info({ event: "mgmt_ddns_saved" }, "DDNS settings saved to SQLite");
+
+            const summary = buildDdnsPublicSummary({
+                getApexDomains: () => this.#registry.getRootDomains(),
+                stored: this.#persistence.getDdnsSettings()
+            });
+            let cachedPublicIp = null;
+            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
+            if (typeof getDb === "function") {
+                try {
+                    const cache = new SqliteIpCache(getDb());
+                    const ip = await cache.read();
+                    cachedPublicIp = ip ? ip.toJSON() : null;
+                } catch {
+                    /* ignore */
+                }
+            }
+            res.status(200).json({ data: { ...summary, cachedPublicIp } });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_ddns_put_error", error: error.message }, "DDNS save failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    async deleteDdns(req, res) {
+        if (typeof this.#persistence.clearDdnsSettings !== "function") {
+            return sendApiError(res, 501, "NOT_IMPLEMENTED", "DDNS settings require SQLite persistence", null);
+        }
+        try {
+            this.#persistence.clearDdnsSettings();
+            this.#logger.info({ event: "mgmt_ddns_cleared" }, "DDNS SQLite settings cleared; configure again via PUT /api/v1/ddns or the management UI");
+
+            const summary = buildDdnsPublicSummary({
+                getApexDomains: () => this.#registry.getRootDomains(),
+                stored: null
+            });
+            let cachedPublicIp = null;
+            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
+            if (typeof getDb === "function") {
+                try {
+                    const cache = new SqliteIpCache(getDb());
+                    const ip = await cache.read();
+                    cachedPublicIp = ip ? ip.toJSON() : null;
+                } catch {
+                    /* ignore */
+                }
+            }
+            res.status(200).json({ data: { ...summary, cachedPublicIp } });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_ddns_delete_error", error: error.message }, "DDNS clear failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    getOpenApi(req, res) {
+        try {
+            const docPath = path.join(__dirname, "openapi.yaml");
+            let yaml = readFileSync(docPath, "utf-8");
+            const rootDomain = this.#registry.rootDomain;
+            yaml = yaml.replace(/\{\{rootDomain\}\}/g, rootDomain);
+            res.set("Content-Type", "application/yaml; charset=utf-8");
+            res.status(200).send(yaml);
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_openapi_error", error: error.message }, "Failed to read OpenAPI spec");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to read OpenAPI specification", null);
+        }
+    }
+
+    getLlmInstructions(req, res) {
+        try {
+            const templatePath = path.join(__dirname, "llms.txt");
+            let instructions = readFileSync(templatePath, "utf-8");
+
+            const rootDomain = this.#registry.rootDomain;
+            const authNote = this.#managementSecret
+                ? "When `MANAGEMENT_SECRET` is set in the server environment, mutating endpoints require `Authorization: Bearer <secret>`. Do not commit the secret to source control."
+                : "When `MANAGEMENT_SECRET` is unset, mutating endpoints do not require a bearer token.";
+
+            instructions = instructions
+                .replace(/\{\{rootDomain\}\}/g, rootDomain)
+                .replace(/\{\{managementAuthNote\}\}/g, authNote);
+
+            res.set("Content-Type", "text/plain; charset=utf-8");
+            res.send(instructions);
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_llms_error", error: error.message }, "Failed to read LLM instructions");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Failed to read LLM instructions", null);
+        }
     }
 }

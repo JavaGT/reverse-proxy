@@ -3,118 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reverse Proxy Dashboard</title>
-    <link rel="stylesheet" href="/style.css">
+    <title>Reverse proxy — management</title>
+    <script>
+        (function () {
+            var t = localStorage.getItem("mgmt_theme");
+            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        })();
+    </script>
+    <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <div class="app-container">
-        <header>
-            <div class="brand">
-                <span class="logo">🛰️</span>
-                <h1>Reverse Proxy</h1>
+    <header class="mgmt-app-bar" role="banner">
+        <div class="mgmt-app-bar-inner">
+            <div class="mgmt-app-brand">
+                <a href="#overview" class="mgmt-app-title">Reverse proxy</a>
+                <span class="mgmt-app-tagline">Management · 127.0.0.1</span>
             </div>
-            <div class="settings">
-                <input type="password" id="secretInput" placeholder="Management Secret" class="secret-field">
+            <div class="mgmt-app-tools">
+                <label for="mgmt-secret">Bearer</label>
+                <input type="password" id="mgmt-secret" autocomplete="off" placeholder="if required" size="14">
+                <span class="mgmt-theme-label">Theme</span>
+                <button type="button" class="mgmt-btn mgmt-theme-cycle" id="theme-cycle-btn">System</button>
+                <button type="button" class="mgmt-btn" id="open-help" title="Help (?)">Help</button>
+                <button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all">Refresh</button>
             </div>
-        </header>
-
-        <main>
-            <aside class="sidebar">
-                <nav class="nav-tabs">
-                    <button class="nav-tab active" data-tab="routes">🛰️ Routes</button>
-                    <button class="nav-tab" data-tab="scanner">🔍 Scanner</button>
-                </nav>
-                <div class="sidebar-actions">
-                    <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh</button>
-                    <button id="addRouteBtn" class="btn btn-primary">➕ New Route</button>
-                </div>
-            </aside>
-
-            <section id="routesTab" class="tab-content active">
-                <div class="stats-row">
-                    <div class="stat-card">
-                        <span class="label">Total Routes</span>
-                        <span id="routeCount" class="value">0</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="label">Healthy Targets</span>
-                        <span id="healthyCount" class="value">0</span>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>Active Routes</h2>
-                    <table id="routeTable">
-                        <thead>
-                            <tr>
-                                <th>Host</th>
-                                <th>Targets</th>
-                                <th>Type</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="routeTableBody">
-                            <!-- Routes will be injected here -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section id="scannerTab" class="tab-content">
-                <div class="card scanner-controls">
-                    <h2>Local Port Scanner</h2>
-                    <p class="text-muted">Discover active services on this machine (127.0.0.1) to easily proxy them.</p>
-                    
-                    <form id="scanForm" class="scan-form">
-                        <div class="form-group-inline">
-                            <label>Range:</label>
-                            <input type="number" id="scanStart" value="3000" min="1" max="65535">
-                            <span>to</span>
-                            <input type="number" id="scanEnd" value="4000" min="1" max="65535">
-                        </div>
-                        <button type="submit" id="startScanBtn" class="btn btn-primary">Start Scan</button>
-                    </form>
-
-                    <div id="scanProgressContainer" class="progress-container hidden">
-                        <div class="progress-bar-bg">
-                            <div id="scanProgressBar" class="progress-bar"></div>
-                        </div>
-                        <span id="scanStatusText" class="text-muted">Scanning...</span>
-                    </div>
-                </div>
-
-                <div class="card scanner-results">
-                    <h3>Found Services</h3>
-                    <div id="scanResultsList" class="results-grid">
-                        <!-- Results will be injected here -->
-                        <div class="empty-state">No scan performed yet.</div>
-                    </div>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Modals -->
-    <div id="addRouteModal" class="modal hidden">
-        <div class="modal-content">
-            <h3>Reserve New Route</h3>
-            <form id="addRouteForm">
-                <div class="form-group">
-                    <label for="subdomain">Subdomain</label>
-                    <input type="text" id="subdomain" name="subdomain" placeholder="e.g. hello" required>
-                </div>
-                <div class="form-group">
-                    <label for="ports">Port(s)</label>
-                    <input type="text" id="ports" name="ports" placeholder="e.g. 3000, 3001" required>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" id="closeModalBtn" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Route</button>
-                </div>
-            </form>
+            <nav class="mgmt-app-nav" aria-label="Page sections">
+                <span class="mgmt-app-nav-main">
+                    <a href="#overview">Overview</a>
+                    <a href="#routes">Routes</a>
+                    <a href="#domains">Domains</a>
+                    <a href="#network">Network</a>
+                    <a href="#scanner">Scanner</a>
+                    <a href="#api">API</a>
+                </span>
+                <span class="mgmt-app-nav-divider" aria-hidden="true">|</span>
+                <span class="mgmt-app-nav-external">
+                    <a href="ddns.html" class="mgmt-app-nav-ddns" title="DDNS settings (separate page)">DDNS</a>
+                </span>
+            </nav>
         </div>
+    </header>
+
+    <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
+        <div class="mgmt-help">
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">Network → local addresses</h3>
+                <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
+                <div class="mgmt-table-collapsible mgmt-table-collapsed">
+                    <div class="mgmt-table-collapsible-bar">
+                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-help">Expand</button>
+                    </div>
+                    <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-help">
+                        <div class="mgmt-table-wrap mgmt-help-table-wrap">
+                            <table class="mgmt-table mgmt-help-table">
+                                <thead>
+                                    <tr><th>Column</th><th>Meaning</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
+                                    <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
+                                    <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
+                                    <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">Public IP (Internet)</h3>
+                <p class="mgmt-help-p">IPv4/IPv6 as seen by public HTTPS &ldquo;what is my IP&rdquo; services (egress). This is separate from the local table.</p>
+            </section>
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">DNS resolution</h3>
+                <p class="mgmt-help-p">The Network <strong>DNS</strong> table lists each configured <strong>apex</strong> and a <strong>catch-all</strong> probe per apex (<code>*.apex</code> with the real probe hostname under it; see the table footnote). Route hostnames appear only in <strong>Routes</strong>. <strong>Matches public</strong> marks when a resolved address matches the reported public IP.</p>
+                <p class="mgmt-help-p"><strong>Primary badge on IP addresses:</strong> In Network (DNS IPv4/IPv6 cells, local addresses, and public IP), an IP shown with the primary (highlighted) badge is one this server reports—either a local interface address or the current public IP from the lookup—so that badge means the value resolves or corresponds to <em>this</em> host.</p>
+            </section>
+        </div>
+        <div slot="footer">
+            <button type="button" class="mgmt-btn mgmt-btn-primary" id="help-modal-close">Close</button>
+        </div>
+    </rp-mgmt-modal>
+
+    <div class="mgmt-page">
+        <section id="overview" class="mgmt-section">
+            <h2>Overview</h2>
+            <p class="mgmt-p">
+                Routes, apex domains, reservations, port scan — SQLite on the server. <button type="button" class="mgmt-inline-help" id="open-help-inline">Help</button> explains Network columns (local vs public IP, DNS).
+            </p>
+            <p class="mgmt-p mgmt-note"><a href="ddns.html">DDNS settings</a> (Porkbun) live on a separate page. When enabled in SQLite, a background schedule syncs DNS; it does not replace TLS or route registration.</p>
+        </section>
+
+        <section id="routes" class="mgmt-section">
+            <rp-routes-panel id="routes-panel"></rp-routes-panel>
+            <rp-reserve-form></rp-reserve-form>
+        </section>
+
+        <section id="domains" class="mgmt-section">
+            <rp-apex-domains-panel></rp-apex-domains-panel>
+        </section>
+
+        <section id="network" class="mgmt-section">
+            <rp-network-panel></rp-network-panel>
+        </section>
+
+        <section id="scanner" class="mgmt-section">
+            <rp-scan-panel></rp-scan-panel>
+        </section>
+
+        <section id="api" class="mgmt-section">
+            <h2>API notes</h2>
+            <p class="mgmt-p">OpenAPI: <a href="/api/v1/openapi.yaml"><code>GET /api/v1/openapi.yaml</code></a> (same as <a href="/openapi.yaml"><code>GET /openapi.yaml</code></a>) · Human docs: <a href="/llms.txt"><code>GET /llms.txt</code></a> (includes the official Node client). JSON errors include <code>error.resolution</code> with fix hints.</p>
+            <p class="mgmt-p">Node integrations: install <a href="https://www.npmjs.com/package/@javagt/reverse-proxy-client" rel="noopener noreferrer"><code>@javagt/reverse-proxy-client</code></a> from npm for <code>createHttpClient</code>, optional SQLite fallback, and the <code>reverse-proxy-mgmt</code> CLI (see <code>llms.txt</code>, section <em>Official Node.js client</em>).</p>
+            <div class="mgmt-table-collapsible mgmt-table-collapsed">
+                <div class="mgmt-table-collapsible-bar">
+                    <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-api">Expand</button>
+                </div>
+                <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-api">
+                    <div class="mgmt-table-wrap">
+                        <table class="mgmt-table">
+                            <thead>
+                                <tr><th>Endpoint</th><th>Purpose</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>GET /api/v1/health</code> / <code>GET /api/v1/status</code></td><td>Control plane liveness</td></tr>
+                                <tr><td><code>GET /api/v1/network</code></td><td>Local and public IPs; DNS for apexes and catch-all probes only (not per-route)</td></tr>
+                                <tr><td><code>GET /api/v1/ddns</code></td><td>Porkbun DDNS status from SQLite; last cached public IP</td></tr>
+                                <tr><td><code>PUT /api/v1/ddns</code></td><td>Save DDNS to SQLite (localhost + bearer); scheduler picks up without restart</td></tr>
+                                <tr><td><code>DELETE /api/v1/ddns</code></td><td>Remove saved DDNS configuration from SQLite</td></tr>
+                                <tr><td><code>GET /api/v1/domains</code></td><td>List apex domains (primary + all)</td></tr>
+                                <tr><td><code>PUT /api/v1/domains</code></td><td>Replace apex list (SQLite); first entry is primary</td></tr>
+                                <tr><td><code>GET /api/v1/routes</code></td><td>List routes with <code>publicUrl</code> / <code>baseDomain</code></td></tr>
+                                <tr><td><code>POST /api/v1/reserve</code></td><td>Body requires <code>baseDomain</code>; optional <code>reservations</code> array for batch</td></tr>
+                                <tr><td><code>DELETE /api/v1/reserve/:subdomain?baseDomain=…</code></td><td>Release; <code>baseDomain</code> required</td></tr>
+                                <tr><td><code>POST /api/v1/scan</code></td><td>Optional JSON <code>start</code>, <code>end</code>, <code>concurrency</code>; inclusive range size 1–10000</td></tr>
+                                <tr><td><code>DELETE /api/v1/process/:port</code></td><td>Stop process listening on TCP port (localhost + bearer when configured)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
-    <script src="/app.js" type="module"></script>
+    <script type="module" src="/mgmt-app.mjs"></script>
 </body>
 </html>
