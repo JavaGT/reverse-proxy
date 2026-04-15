@@ -6,22 +6,41 @@
     <title>Server settings · Reverse proxy</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <rp-mgmt-header tagline="Settings · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh" current="settings"></rp-mgmt-header>
+    <rp-mgmt-header tagline="Settings · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
             <section class="mgmt-help-section">
                 <h3 class="mgmt-help-h">Server settings</h3>
-                <p class="mgmt-help-p">Values here are stored in SQLite (<code>meta.server_settings</code>) and merged over <code>.env</code> when the process starts or after you save. <code>SQLITE_DB_PATH</code> (and usually <code>TLS_CERT_DIR</code> for first boot) stay in <code>.env</code> only.</p>
-                <p class="mgmt-help-p"><strong>DNS console links</strong> (registrar “manage DNS” URLs on the Domains page) resolve in this order: per-apex override → default set on Domains → this setting (<code>dnsConsoleDefaultProvider</code>) → <code>.env</code> <code>DNS_CONSOLE_DEFAULT_PROVIDER</code>.</p>
+                <p class="mgmt-help-p">Values here are stored in SQLite (<code>meta.server_settings</code>) and merged with built-in defaults when the process starts or after you save. The database file is always <code>./reverse-proxy.db</code> in the server’s working directory.</p>
+                <p class="mgmt-help-p"><strong>DNS console links</strong> (registrar “manage DNS” URLs on the Domains page) resolve in this order: per-apex override → default set on Domains → this setting (<code>dnsConsoleDefaultProvider</code>).</p>
                 <p class="mgmt-help-p">Changing listener port, TLS path, session secret, trust proxy, or rate limits may require a full process restart to apply everywhere.</p>
             </section>
         </div>
@@ -30,8 +49,17 @@
         </div>
     </rp-mgmt-modal>
 
-    <main id="main-content" class="mgmt-page">
-        <rp-settings-app></rp-settings-app>
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="pages" current="settings"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="About server settings">
+                    <p class="mgmt-p">Values you save here are stored in SQLite and merged with built-in defaults when the server starts or after a reload. Most installs only open this page for occasional tuning.</p>
+                    <p class="mgmt-p mgmt-muted">Changing listener ports, TLS paths, or session secrets may require a full process restart to apply everywhere.</p>
+                </div>
+                <rp-settings-app></rp-settings-app>
+            </div>
+        </div>
     </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>

@@ -3,11 +3,14 @@ import assert from "node:assert";
 import {
     describeManagementLocalOperatorCheck,
     effectiveManagementClientIp,
+    isDataPlaneTlsPeerSameHost,
     isLocalRequest,
     managementClientIsLoopback,
     managementClientIsSameMachine,
     normalizeComparableIp,
-    resolveManagementLocalOperator
+    resolveManagementLocalOperator,
+    MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER,
+    setPersistedDdnsPublicIpsForLocalOperator
 } from "../../src/shared/utils/RequestUtils.mjs";
 
 function reqWithRemote(addr) {
@@ -42,10 +45,30 @@ test("isLocalRequest: missing socket address", () => {
 test("effectiveManagementClientIp: prefers forwarded client when req.ip differs", () => {
     const req = {
         socket: { remoteAddress: "127.0.0.1" },
-        ip: "198.51.100.2"
+        ip: "198.51.100.2",
+        headers: { "x-forwarded-for": "198.51.100.2" }
     };
     assert.strictEqual(effectiveManagementClientIp(req), "198.51.100.2");
     assert.strictEqual(managementClientIsLoopback(req), false);
+});
+
+test("managementClientIsLoopback: direct loopback hit despite mismatched req.ip when no forwarding headers", () => {
+    const req = {
+        socket: { remoteAddress: "127.0.0.1" },
+        ip: "198.51.100.2"
+    };
+    assert.strictEqual(managementClientIsLoopback(req), true);
+    assert.strictEqual(resolveManagementLocalOperator(req).sameMachine, true);
+});
+
+test("managementClientIsLoopback: noisy X-Forwarded-For that does not change req.ip vs socket still counts as local", () => {
+    const req = {
+        socket: { remoteAddress: "127.0.0.1" },
+        ip: "127.0.0.1",
+        headers: { "x-forwarded-for": "127.0.0.1" }
+    };
+    assert.strictEqual(managementClientIsLoopback(req), true);
+    assert.strictEqual(resolveManagementLocalOperator(req).sameMachine, true);
 });
 
 test("managementClientIsLoopback: loopback when socket and req.ip agree", () => {
@@ -64,10 +87,51 @@ test("managementClientIsSameMachine: loopback via req.ip", () => {
 test("managementClientIsSameMachine: unrelated forwarded IP is not assumed same-machine", () => {
     const req = {
         socket: { remoteAddress: "127.0.0.1" },
-        ip: "192.0.2.1"
+        ip: "192.0.2.1",
+        headers: { "x-forwarded-for": "192.0.2.1" }
     };
     assert.strictEqual(managementClientIsLoopback(req), false);
     assert.strictEqual(managementClientIsSameMachine(req), false);
+});
+
+test("isDataPlaneTlsPeerSameHost: loopback peer", () => {
+    assert.strictEqual(isDataPlaneTlsPeerSameHost("127.0.0.1"), true);
+    assert.strictEqual(isDataPlaneTlsPeerSameHost("::1"), true);
+});
+
+test("isDataPlaneTlsPeerSameHost: matches persisted DDNS meta public IP", () => {
+    const prev = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    setPersistedDdnsPublicIpsForLocalOperator(["203.0.113.44"]);
+    try {
+        assert.strictEqual(isDataPlaneTlsPeerSameHost("203.0.113.44"), true);
+    } finally {
+        setPersistedDdnsPublicIpsForLocalOperator([]);
+        if (prev === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prev;
+    }
+});
+
+test("resolveManagementLocalOperator: data-plane same-host header on internal hop skips XFF mismatch", () => {
+    const prev = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    try {
+        const req = {
+            socket: { remoteAddress: "127.0.0.1" },
+            ip: "192.0.2.1",
+            headers: {
+                "x-forwarded-for": "192.0.2.1",
+                [MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER]: "1"
+            }
+        };
+        assert.strictEqual(managementClientIsLoopback(req), false);
+        const r = resolveManagementLocalOperator(req);
+        assert.strictEqual(r.sameMachine, true);
+        assert.strictEqual(r.reason, "data_plane_same_host");
+    } finally {
+        if (prev === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prev;
+    }
 });
 
 test("managementClientIsSameMachine: MANAGEMENT_LOCAL_OPERATOR_IPS matches forwarded WAN-style IP", () => {

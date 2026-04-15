@@ -1,25 +1,17 @@
 import http from "node:http";
 import { createHttpClient, ManagementApiError } from "@javagt/reverse-proxy-client";
 
-const listenHost = process.env.LISTEN_HOST ?? "127.0.0.1";
-const port = Number(process.env.PORT ?? 8765);
-const subdomain = process.env.SUBDOMAIN ?? "hello";
-const baseDomain = process.env.BASE_DOMAIN;
+/** Edit these to match your proxy (apex must exist in the proxy’s domain list). */
+const listenHost = "127.0.0.1";
+const port = 8765;
+const subdomain = "hello";
+const baseDomain = "example.com";
 
-const managementPort = process.env.MANAGEMENT_INTERFACE_PORT ?? "24789";
-const baseUrl =
-    process.env.MANAGEMENT_URL?.replace(/\/$/, "") ??
-    `http://127.0.0.1:${managementPort}`;
+/** Management API (loopback; port from Settings → managementInterfacePort, default 24789). */
+const baseUrl = "http://127.0.0.1:24789";
 
 /** Path the proxy probes when `options.healthPath` is set on reserve (GET, expect 2xx). */
 const HEALTH_PATH = "/health";
-
-if (!baseDomain || String(baseDomain).trim() === "") {
-    console.error(
-        "Set BASE_DOMAIN to an apex configured on the proxy (ROOT_DOMAINS or SQLite domains), e.g. export BASE_DOMAIN=your-domain.com"
-    );
-    process.exit(1);
-}
 
 const client = createHttpClient({ baseUrl });
 

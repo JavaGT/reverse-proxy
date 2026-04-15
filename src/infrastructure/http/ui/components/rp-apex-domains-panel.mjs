@@ -61,7 +61,7 @@ function apexDnsConsoleSelectValue(dc, apex) {
  */
 function providerSelectOptionsHtml(ids, selected, forDefault) {
     const inheritLabel = forDefault
-        ? "Inherit (Settings → DNS console default provider, or .env DNS_CONSOLE_DEFAULT_PROVIDER)"
+        ? "Inherit (Settings → DNS console default provider)"
         : "Inherit (use default above)";
     const parts = [
         `<option value="inherit" ${selected === "inherit" ? "selected" : ""}>${escapeHtml(inheritLabel)}</option>`,
@@ -159,16 +159,17 @@ export class RpApexDomainsPanel extends HTMLElement {
                 <rp-panel-toolbar heading="Apex domains">
                     <button type="button" slot="actions" class="mgmt-btn mgmt-btn-primary" id="apex-btn-add">Add domain</button>
                 </rp-panel-toolbar>
-                <p class="mgmt-p">Each reservation names an apex via <code>baseDomain</code>. Saving changes writes SQLite and overrides <code>ROOT_DOMAINS</code> until changed again.</p>
+                <p class="mgmt-p">These are the root domain names this proxy accepts for reservations. Saving writes SQLite and overrides the default apex list from Settings until you change them again.</p>
+                <p class="mgmt-p mgmt-muted">Each reservation still picks a <code>baseDomain</code> from this list. Use registrar links when you want one-click DNS management.</p>
                 <h3 class="mgmt-h3">DNS management console links</h3>
-                <p class="mgmt-p mgmt-note">Opens your registrar’s DNS page per apex (e.g. Porkbun). Resolution order: <strong>per-apex override</strong> → <strong>default below</strong> → <strong>Settings</strong> (<code>dnsConsoleDefaultProvider</code> / SQLite) → <code>.env</code> <code>DNS_CONSOLE_DEFAULT_PROVIDER</code>. DDNS (API keys, sync) is configured on the <a href="ddns.html">DDNS</a> page.</p>
+                <p class="mgmt-p mgmt-note">Opens your registrar’s DNS page per apex (e.g. Porkbun). Resolution order: <strong>per-apex override</strong> → <strong>default below</strong> → <strong>Settings</strong> (<code>dnsConsoleDefaultProvider</code>). DDNS (API keys, sync) is configured on the <a href="ddns.html">DDNS</a> page.</p>
                 <div class="mgmt-form-row">
                     <label for="dns-console-default">Default registrar / console</label>
                     <select id="dns-console-default" class="mgmt-input">${defaultSelectHtml}</select>
                 </div>
                 <div class="mgmt-form-actions mgmt-dns-console-actions">
                     <button type="button" class="mgmt-btn mgmt-btn-primary" id="dns-console-save">Save DNS console settings</button>
-                    <button type="button" class="mgmt-btn" id="dns-console-clear" title="Remove stored dnsConsole; fall back to Settings / .env only">Clear stored console config</button>
+                    <button type="button" class="mgmt-btn" id="dns-console-clear" title="Remove stored dnsConsole; fall back to Settings only">Clear stored console config</button>
                 </div>
                 <p id="dns-console-status" class="mgmt-p mgmt-note" role="status" aria-live="polite"></p>
                 ${wrapCollapsibleTable(`<div class="mgmt-table-wrap">
@@ -189,7 +190,7 @@ export class RpApexDomainsPanel extends HTMLElement {
                     <form id="apex-form-add">
                         <div class="mgmt-form-row">
                             <label for="apex-in-add">Domain</label>
-                            <input type="text" id="apex-in-add" class="mgmt-in-add" required placeholder="e.g. example.com" autocomplete="off" spellcheck="false">
+                            <input type="text" id="apex-in-add" class="mgmt-in-add" required placeholder="e.g. example.com…" autocomplete="off" spellcheck="false">
                         </div>
                         <p class="mgmt-note">Appends to the list. Primary stays the current first apex until you remove it or change order via the API.</p>
                     </form>
@@ -225,7 +226,7 @@ export class RpApexDomainsPanel extends HTMLElement {
 
             this.querySelector("#dns-console-clear")?.addEventListener("click", async () => {
                 if (!this.#data?.apexDomains) return;
-                if (!confirm("Remove dnsConsole from SQLite? Console links will use only Settings / .env until you configure again.")) {
+                if (!confirm("Remove dnsConsole from SQLite? Console links will use only Settings until you configure again.")) {
                     return;
                 }
                 if (dnsStatus) dnsStatus.textContent = "Saving…";

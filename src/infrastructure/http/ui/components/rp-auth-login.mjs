@@ -30,7 +30,7 @@ export class RpAuthLogin extends HTMLElement {
         <form id="form-pass" autocomplete="on">
             <div class="mgmt-login-field">
                 <label class="mgmt-label" for="user">Username</label>
-                <input id="user" name="username" type="text" autocomplete="username" required>
+                <input id="user" name="username" type="text" autocomplete="username" spellcheck="false" required>
             </div>
             <div class="mgmt-login-field">
                 <label class="mgmt-label" for="pass">Password</label>
@@ -38,7 +38,7 @@ export class RpAuthLogin extends HTMLElement {
             </div>
             <div id="row-2fa" class="mgmt-login-field" hidden>
                 <label class="mgmt-label" for="twofa">2FA</label>
-                <input id="twofa" name="twofa" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
+                <input id="twofa" name="twofa" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code…" spellcheck="false">
             </div>
             <div class="mgmt-login-actions">
                 <button type="submit" class="mgmt-btn mgmt-btn-primary" id="btn-pass">Sign in</button>
@@ -50,7 +50,7 @@ export class RpAuthLogin extends HTMLElement {
                 <button type="submit" class="mgmt-btn mgmt-btn-primary" id="btn-pk">Sign in with passkey</button>
             </div>
         </form>
-        <p id="msg" class="mgmt-login-msg" role="alert"></p>
+        <p id="msg" class="mgmt-login-msg" role="alert" aria-live="assertive"></p>
         <p class="mgmt-p mgmt-note"><a href="/register.html">Create an account</a> — ask an operator for the invite secret on the <a href="accounts.html">Accounts</a> page when <code>MANAGEMENT_REGISTRATION_SECRET</code> is set.</p>
         <p class="mgmt-p mgmt-note mgmt-login-footnote">Access from this machine (loopback or this host&rsquo;s IP behind a local reverse proxy) does not require sign-in. Use SSH port forwarding if you use the management URL from another device.</p>
     </section>

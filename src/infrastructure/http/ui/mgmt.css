@@ -17,17 +17,23 @@
     --muted: #475569;
     --link: #1d4ed8;
     --link-visited: #6d28d9;
-    --thead: #eaecf0;
-    --code-bg: #f8f9fa;
-    --code-border: #eaecf0;
+    --thead: color-mix(in srgb, var(--link) 11%, var(--panel-muted));
     --divider: #eaecf0;
-    --table-stripe: #f8f9fa;
-    --btn-bg: #f8f9fa;
-    --btn-hover: #eaecf0;
-    --btn-outline: #cfcfcf;
-    --btn-primary: #eaf3ff;
-    --btn-primary-hover: #dceaff;
-    --btn-primary-outline: #c5d9f5;
+    --table-stripe: color-mix(in srgb, var(--link) 6%, var(--panel-muted));
+    /* Shared neutral control chrome (buttons, badges, code, form fields) */
+    --control-surface: color-mix(in srgb, var(--link) 7%, var(--panel-muted));
+    --control-surface-hover: color-mix(in srgb, var(--link) 12%, var(--panel-muted));
+    --control-edge: color-mix(in srgb, var(--link) 26%, var(--border-subtle));
+    --code-bg: var(--control-surface);
+    --code-border: var(--control-edge);
+    --input-bg: var(--panel);
+    --input-border: var(--control-edge);
+    --btn-bg: var(--control-surface);
+    --btn-hover: var(--control-surface-hover);
+    --btn-outline: var(--control-edge);
+    --btn-primary: color-mix(in srgb, var(--link) 22%, var(--panel));
+    --btn-primary-hover: color-mix(in srgb, var(--link) 30%, var(--panel));
+    --btn-primary-outline: color-mix(in srgb, var(--link) 42%, var(--border-subtle));
     --btn-edit: #fffbeb;
     --btn-edit-border: #e8c96c;
     --btn-edit-hover: #fef3c7;
@@ -55,17 +61,22 @@
         --muted: #94a3b8;
         --link: #7cb3ff;
         --link-visited: #c4a8ff;
-        --thead: #333333;
-        --code-bg: #2c2c2c;
-        --code-border: #444444;
+        --thead: color-mix(in srgb, var(--link) 16%, var(--panel-muted));
         --divider: #3a3a3a;
-        --table-stripe: #2a2a2a;
-        --btn-bg: #333333;
-        --btn-hover: #404040;
-        --btn-outline: #4a4a4a;
-        --btn-primary: #1e3a5c;
-        --btn-primary-hover: #254a73;
-        --btn-primary-outline: #355a82;
+        --table-stripe: color-mix(in srgb, var(--link) 7%, var(--panel-muted));
+        --control-surface: color-mix(in srgb, var(--link) 12%, var(--panel));
+        --control-surface-hover: color-mix(in srgb, var(--link) 18%, var(--panel));
+        --control-edge: color-mix(in srgb, var(--link) 42%, var(--border-subtle));
+        --code-bg: var(--control-surface);
+        --code-border: var(--control-edge);
+        --input-bg: var(--panel);
+        --input-border: var(--control-edge);
+        --btn-bg: var(--control-surface);
+        --btn-hover: var(--control-surface-hover);
+        --btn-outline: var(--control-edge);
+        --btn-primary: color-mix(in srgb, var(--link) 32%, var(--panel));
+        --btn-primary-hover: color-mix(in srgb, var(--link) 42%, var(--panel));
+        --btn-primary-outline: color-mix(in srgb, var(--link) 50%, var(--border-subtle));
         --btn-edit: #422006;
         --btn-edit-border: #8b6914;
         --btn-edit-hover: #57301d;
@@ -129,17 +140,22 @@ body.mgmt-local-operator #mgmt-sign-out {
     --muted: #94a3b8;
     --link: #7cb3ff;
     --link-visited: #c4a8ff;
-    --thead: #333333;
-    --code-bg: #2c2c2c;
-    --code-border: #444444;
+    --thead: color-mix(in srgb, var(--link) 16%, var(--panel-muted));
     --divider: #3a3a3a;
-    --table-stripe: #2a2a2a;
-    --btn-bg: #333333;
-    --btn-hover: #404040;
-    --btn-outline: #4a4a4a;
-    --btn-primary: #1e3a5c;
-    --btn-primary-hover: #254a73;
-    --btn-primary-outline: #355a82;
+    --table-stripe: color-mix(in srgb, var(--link) 7%, var(--panel-muted));
+    --control-surface: color-mix(in srgb, var(--link) 12%, var(--panel));
+    --control-surface-hover: color-mix(in srgb, var(--link) 18%, var(--panel));
+    --control-edge: color-mix(in srgb, var(--link) 42%, var(--border-subtle));
+    --code-bg: var(--control-surface);
+    --code-border: var(--control-edge);
+    --input-bg: var(--panel);
+    --input-border: var(--control-edge);
+    --btn-bg: var(--control-surface);
+    --btn-hover: var(--control-surface-hover);
+    --btn-outline: var(--control-edge);
+    --btn-primary: color-mix(in srgb, var(--link) 32%, var(--panel));
+    --btn-primary-hover: color-mix(in srgb, var(--link) 42%, var(--panel));
+    --btn-primary-outline: color-mix(in srgb, var(--link) 50%, var(--border-subtle));
     --btn-edit: #422006;
     --btn-edit-border: #8b6914;
     --btn-edit-hover: #57301d;
@@ -179,6 +195,28 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Before custom elements upgrade, unknown tags are inline — reserve block layout to reduce FOUC. */
+rp-mgmt-header:not(:defined),
+rp-mgmt-sidebar:not(:defined),
+rp-mgmt-modal:not(:defined),
+rp-panel-toolbar:not(:defined),
+rp-apex-domains-panel:not(:defined),
+rp-routes-panel:not(:defined),
+rp-reserve-form:not(:defined),
+rp-scan-panel:not(:defined),
+rp-ddns-panel:not(:defined),
+rp-network-panel:not(:defined),
+rp-accounts-app:not(:defined),
+rp-settings-app:not(:defined),
+rp-auth-login:not(:defined),
+rp-auth-register:not(:defined) {
+    display: block;
+}
+
+rp-mgmt-header:not(:defined) {
+    min-height: var(--app-bar-h);
+}
+
 a {
     color: var(--link);
     text-decoration: underline;
@@ -194,12 +232,18 @@ pre {
     font-size: 0.88em;
     background: var(--code-bg);
     border: 1px solid var(--code-border);
+    color: var(--text);
     padding: 0.1em 0.35em;
+}
+
+code {
+    border-radius: 4px;
 }
 
 pre {
     padding: 0.75rem 1rem;
     overflow-x: auto;
+    border-radius: var(--radius-sm);
 }
 
 /* —— Sticky app bar —— */
@@ -216,7 +260,7 @@ pre {
 }
 
 .mgmt-app-bar-inner {
-    max-width: 960px;
+    max-width: 1080px;
     margin: 0 auto;
     padding: 0.5rem 0.75rem;
     display: flex;
@@ -255,53 +299,6 @@ pre {
     font-size: 0.78rem;
 }
 
-.mgmt-app-nav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.55rem;
-    justify-content: flex-end;
-    min-width: 0;
-}
-
-.mgmt-app-nav-main {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.65rem;
-}
-
-.mgmt-app-nav-divider {
-    color: var(--muted);
-    font-weight: 300;
-    user-select: none;
-    padding: 0 0.1rem;
-    line-height: 1;
-}
-
-.mgmt-app-nav-external {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.mgmt-app-nav a {
-    text-decoration: none;
-    color: var(--link);
-    white-space: nowrap;
-}
-
-.mgmt-app-nav a:hover {
-    text-decoration: underline;
-}
-
-.mgmt-app-nav .mgmt-app-nav-current {
-    color: var(--text);
-    font-weight: 600;
-    white-space: nowrap;
-    cursor: default;
-}
-
 .mgmt-app-tools {
     display: flex;
     flex-wrap: wrap;
@@ -327,8 +324,9 @@ button.mgmt-theme-cycle {
 .mgmt-app-tools input[type="text"] {
     font: inherit;
     padding: 0.15rem 0.35rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
     color: var(--text);
     max-width: 11rem;
 }
@@ -353,12 +351,13 @@ button.mgmt-theme-cycle {
 
 .mgmt-invite-input {
     max-width: 10rem;
+    font: inherit;
     font-size: 0.8rem;
-}
-
-.mgmt-app-nav-ddns-sep {
-    margin: 0 0.2rem;
-    color: var(--muted);
+    padding: 0.15rem 0.35rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
 }
 
 .mgmt-account-invite-block {
@@ -500,13 +499,212 @@ button.mgmt-theme-cycle {
 .mgmt-settings-fields .mgmt-login-field input[type="text"],
 .mgmt-settings-fields .mgmt-login-field input[type="number"],
 .mgmt-settings-fields .mgmt-login-field input[type="password"] {
+    width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text);
 }
 
 .mgmt-page {
     max-width: 960px;
     margin: 0 auto;
     padding: 0.75rem 0.85rem 2.5rem;
+}
+
+/* Management shell: sidebar + main (dashboard, settings, accounts, …) */
+.mgmt-page--shell {
+    max-width: 1080px;
+}
+
+.mgmt-shell {
+    display: grid;
+    grid-template-columns: 12.5rem minmax(0, 1fr);
+    gap: 1.25rem 1.5rem;
+    align-items: start;
+}
+
+.mgmt-shell-main {
+    min-width: 0;
+}
+
+.mgmt-shell-panels {
+    min-width: 0;
+}
+
+rp-mgmt-sidebar {
+    display: block;
+    align-self: start;
+}
+
+.mgmt-sidebar-nav {
+    position: sticky;
+    top: calc(var(--app-bar-h) + 0.75rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    margin: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-sm);
+}
+
+.mgmt-sidebar-group {
+    margin: 0;
+    padding: 0 0.35rem;
+}
+
+.mgmt-sidebar-group + .mgmt-sidebar-group {
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.mgmt-sidebar-label {
+    margin: 0 0 0.35rem 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.mgmt-sidebar-group-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.06rem;
+}
+
+.mgmt-sidebar-link {
+    display: block;
+    padding: 0.45rem 0.65rem 0.45rem 0.75rem;
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--link);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    line-height: 1.35;
+}
+
+a.mgmt-sidebar-link:hover {
+    background: var(--panel-muted);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.mgmt-sidebar-link:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
+
+.mgmt-sidebar-link.is-active {
+    font-weight: 650;
+    background: color-mix(in srgb, var(--link) 10%, var(--panel-muted));
+    border-left-color: var(--link);
+    color: var(--text);
+}
+
+span.mgmt-sidebar-link.is-active {
+    cursor: default;
+}
+
+@media (max-width: 720px) {
+    .mgmt-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .mgmt-sidebar-nav {
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 0.4rem;
+        gap: 0.35rem;
+        align-items: stretch;
+    }
+
+    .mgmt-sidebar-group {
+        flex: 1 1 100%;
+        display: contents;
+    }
+
+    .mgmt-sidebar-group + .mgmt-sidebar-group {
+        border-top: none;
+        padding-top: 0;
+    }
+
+    .mgmt-sidebar-label {
+        flex: 1 1 100%;
+        margin: 0.25rem 0 0.15rem;
+    }
+
+    .mgmt-sidebar-group-links {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        flex: 1 1 auto;
+    }
+
+    .mgmt-sidebar-link {
+        flex: 1 1 auto;
+        min-width: 5.25rem;
+        text-align: center;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+        border-radius: var(--radius-sm);
+        padding: 0.4rem 0.45rem;
+    }
+
+    .mgmt-sidebar-link.is-active {
+        border-left-color: transparent;
+        border-bottom-color: var(--link);
+    }
+}
+
+/* First-run orientation (short copy above dense panels) */
+.mgmt-page-intro {
+    margin: 0 0 1rem;
+    padding: 0.85rem 1rem;
+    background: var(--panel-muted);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    max-width: 52rem;
+}
+
+.mgmt-page-intro .mgmt-p:last-child {
+    margin-bottom: 0;
+}
+
+.mgmt-ddns-bullets {
+    margin: 0.35rem 0 0.75rem 1.1rem;
+    padding: 0;
+    max-width: 44rem;
+    line-height: 1.5;
+    font-size: 0.88rem;
+    color: var(--muted);
+}
+
+.mgmt-ddns-bullets li {
+    margin: 0.2rem 0;
+}
+
+@supports (text-wrap: balance) {
+    .mgmt-section > h2,
+    .mgmt-masthead h1 {
+        text-wrap: balance;
+    }
+}
+
+@supports (text-wrap: pretty) {
+    .mgmt-page-intro .mgmt-p {
+        text-wrap: pretty;
+    }
 }
 
 .mgmt-masthead {
@@ -662,37 +860,6 @@ button.mgmt-theme-cycle {
     justify-content: flex-end;
 }
 
-.mgmt-table-collapsible {
-    margin: 0.3rem 0 0.55rem;
-}
-
-.mgmt-table-collapsible-bar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 0.25rem;
-}
-
-.mgmt-table-collapsible .mgmt-table-toggle {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.55rem;
-    border-radius: var(--radius-sm);
-    min-height: 2rem;
-}
-
-.mgmt-table-collapsible.mgmt-table-collapsed .mgmt-table-collapsible-body {
-    max-height: 8em;
-    overflow: auto;
-}
-
-.mgmt-table-collapsible:not(.mgmt-table-collapsed) .mgmt-table-collapsible-body {
-    max-height: none;
-    overflow: visible;
-}
-
-.mgmt-table-collapsible .mgmt-table-wrap {
-    margin: 0;
-}
-
 .mgmt-table-wrap {
     overflow-x: auto;
     border: 1px solid var(--border-subtle);
@@ -772,7 +939,7 @@ table.mgmt-table tr:nth-child(even) {
     background: var(--table-stripe);
 }
 
-button.mgmt-btn {
+:is(button, a).mgmt-btn {
     font-family: var(--font-sans);
     font-size: 0.8125rem;
     padding: 0.28rem 0.55rem;
@@ -783,42 +950,49 @@ button.mgmt-btn {
     color: var(--text);
     cursor: pointer;
     min-height: 2rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
 }
 
-button.mgmt-btn:hover {
+:is(button, a).mgmt-btn:hover {
     background: var(--btn-hover);
 }
 
-button.mgmt-btn-primary {
+:is(button, a).mgmt-btn-primary {
     background: var(--btn-primary);
     border-color: var(--btn-primary-outline);
+    color: var(--link);
 }
 
-button.mgmt-btn-primary:hover {
+:is(button, a).mgmt-btn-primary:hover {
     background: var(--btn-primary-hover);
+    color: var(--link);
 }
 
-button.mgmt-btn.route-edit,
-button.mgmt-btn.sc-proxy {
+:is(button, a).mgmt-btn.route-edit,
+:is(button, a).mgmt-btn.sc-proxy {
     background: var(--btn-edit);
     border-color: var(--btn-edit-border);
     color: var(--btn-edit-text);
 }
 
-button.mgmt-btn.route-edit:hover,
-button.mgmt-btn.sc-proxy:hover {
+:is(button, a).mgmt-btn.route-edit:hover,
+:is(button, a).mgmt-btn.sc-proxy:hover {
     background: var(--btn-edit-hover);
 }
 
-button.mgmt-btn.route-delete,
-button.mgmt-btn.sc-kill {
+:is(button, a).mgmt-btn.route-delete,
+:is(button, a).mgmt-btn.sc-kill {
     background: var(--btn-delete);
     border-color: var(--btn-delete-border);
     color: var(--btn-delete-text);
 }
 
-button.mgmt-btn.route-delete:hover,
-button.mgmt-btn.sc-kill:hover {
+:is(button, a).mgmt-btn.route-delete:hover,
+:is(button, a).mgmt-btn.sc-kill:hover {
     background: var(--btn-delete-hover);
 }
 
@@ -835,8 +1009,9 @@ button.mgmt-btn.sc-kill:hover {
     width: 5rem;
     font: inherit;
     padding: 0.12rem 0.35rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
     color: var(--text);
 }
 
@@ -863,7 +1038,7 @@ button.mgmt-btn.sc-kill:hover {
 }
 
 .mgmt-fieldset {
-    border: 1px solid var(--border);
+    border: 1px solid var(--input-border);
     padding: 0.45rem 0.65rem 0.55rem;
     margin: 0.35rem 0;
     border-radius: 4px;
@@ -968,7 +1143,8 @@ button.mgmt-btn.sc-kill:hover {
 }
 
 .mgmt-ddns-badge-neutral {
-    background: color-mix(in srgb, var(--text, #333) 10%, transparent);
+    background: var(--control-surface);
+    color: var(--text);
 }
 
 .mgmt-ddns-badge-paused {
@@ -1001,6 +1177,21 @@ button.mgmt-btn.sc-kill:hover {
     justify-content: center;
 }
 
+/* Standalone fields (DDNS URL, DNS console dropdowns in tables, etc.) */
+input.mgmt-input,
+select.mgmt-input,
+textarea.mgmt-input {
+    font: inherit;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--input-bg);
+    color: var(--text);
+    min-height: 2rem;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
 .mgmt-form-row input[type="text"],
 .mgmt-form-row input[type="number"],
 .mgmt-form-row input[type="password"],
@@ -1008,9 +1199,34 @@ button.mgmt-btn.sc-kill:hover {
 .mgmt-select {
     font: inherit;
     padding: 0.2rem 0.4rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--input-bg);
     color: var(--text);
+    min-height: 2rem;
+    box-sizing: border-box;
+}
+
+/* Native selects: consistent height, theme-aware chevron, no system chrome */
+select.mgmt-input,
+.mgmt-form-row select,
+.mgmt-select {
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 1.85rem;
+    background-color: var(--input-bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='currentColor' d='M3 6h10l-5 5-5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.35rem center;
+    background-size: 0.75rem;
+    color: var(--text);
+}
+
+select.mgmt-input::-ms-expand,
+.mgmt-form-row select::-ms-expand,
+.mgmt-select::-ms-expand {
+    display: none;
 }
 
 .mgmt-note {
@@ -1117,8 +1333,9 @@ tbody tr.mgmt-dns-section-head:not(:first-of-type) .mgmt-dns-section-title-cell 
     max-width: 40rem;
     font: 0.9rem/1.35 var(--font-sans);
     padding: 0.4rem 0.5rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
     color: var(--text);
 }
 
@@ -1186,15 +1403,16 @@ rp-scan-panel[hidden] {
     font-size: 0.72rem;
     font-family: var(--font-sans);
     padding: 0.1em 0.45em;
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-edge);
     border-radius: 2px;
-    background: var(--code-bg);
-    color: var(--muted);
+    background: var(--control-surface);
+    color: var(--text);
 }
 
 .mgmt-badge-primary {
-    border-color: var(--link);
+    border-color: var(--btn-primary-outline);
     color: var(--link);
+    background: var(--btn-primary);
 }
 
 .mgmt-badge-health-up {
@@ -1222,14 +1440,15 @@ code.mgmt-badge {
     font-size: 0.72rem;
     padding: 0.1em 0.45em;
     border-radius: 2px;
-    background: var(--code-bg);
-    color: var(--muted);
-    border: 1px solid var(--border);
+    background: var(--control-surface);
+    color: var(--text);
+    border: 1px solid var(--control-edge);
 }
 
 code.mgmt-badge.mgmt-badge-primary {
-    border-color: var(--link);
+    border-color: var(--btn-primary-outline);
     color: var(--link);
+    background: var(--btn-primary);
 }
 
 /* Help modal content (light DOM inside rp-mgmt-modal) */
@@ -1310,8 +1529,9 @@ body.mgmt-login-page .mgmt-login-field input[type="password"] {
     box-sizing: border-box;
     font: inherit;
     padding: 0.2rem 0.4rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
     color: var(--text);
 }
 
@@ -1351,4 +1571,12 @@ body.mgmt-login-page .mgmt-login-footnote {
 body.mgmt-login-page button.mgmt-btn:disabled {
     opacity: 0.65;
     cursor: not-allowed;
+}
+
+:is(button, a).mgmt-btn:visited {
+    color: var(--text);
+}
+
+:is(button, a).mgmt-btn-primary:visited {
+    color: var(--link);
 }

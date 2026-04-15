@@ -1,11 +1,13 @@
 import { porkbunDnsConsole } from "./providers/porkbun.mjs";
+import { namecheapDnsConsole } from "./providers/namecheap.mjs";
 
 /**
  * Pluggable DNS registrar / DNS host "open management UI" links.
  * Add providers here and expose their ids in API validation.
  */
 const byId = new Map([
-    [porkbunDnsConsole.id, porkbunDnsConsole]
+    [porkbunDnsConsole.id, porkbunDnsConsole],
+    [namecheapDnsConsole.id, namecheapDnsConsole]
 ]);
 
 /** @returns {readonly string[]} */

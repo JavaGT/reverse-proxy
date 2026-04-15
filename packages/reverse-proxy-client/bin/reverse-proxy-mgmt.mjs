@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { loadEnvFile } from "node:process";
 import { createAutoClient, createDbClient, createHttpClient, ManagementApiError } from "../src/index.mjs";
 
-try {
-    loadEnvFile(".env");
-} catch (err) {
-    if (err?.code !== "ENOENT") throw err;
+/** @param {string} path */
+function readJsonFile(path) {
+    return JSON.parse(readFileSync(path, "utf-8"));
 }
 
 function parseArgs(argv) {
@@ -25,6 +23,8 @@ function parseArgs(argv) {
             flags.mode = args[++i];
         } else if (a === "--file") {
             flags.file = args[++i];
+        } else if (a === "--job") {
+            flags.job = args[++i];
         } else if (a === "--subdomain") {
             flags.subdomain = args[++i];
         } else if (a === "--base-domain") {
@@ -49,7 +49,7 @@ Usage:
 
 Options:
   --url <url>           Management base URL (default http://127.0.0.1:24789)
-  --db <path>           SQLite path (default env SQLITE_DB_PATH or ./reverse-proxy.db)
+  --db <path>           SQLite path (default ./reverse-proxy.db)
   --mode auto|http|db   Transport (default auto: probe /api/v1/health, else SQLite)
   --json                Print JSON only (no hints)
 
@@ -65,7 +65,7 @@ Commands:
   kill <port>           HTTP only
   ddns get
   ddns set             Requires --file <body.json> (same fields as PUT /api/v1/ddns)
-  ddns sync            HTTP only — POST /api/v1/ddns/sync
+  ddns sync            HTTP only — POST /api/v1/ddns/sync (optional --job <jobId>)
   ddns clear
 
 Database writes: stop the reverse-proxy process before using db mode for reserve/release/domains set/ddns set|clear.
@@ -76,11 +76,11 @@ async function main() {
     const { flags, positional } = parseArgs(process.argv);
     if (positional[0] === "help" || positional[0] === "--help" || positional[0] === "-h" || positional.length === 0) {
         printHelp();
-        process.exit(positional.length === 0 ? 0 : 0);
+        process.exit(0);
     }
 
-    const baseUrl = flags.url ?? process.env.MANAGEMENT_URL ?? "http://127.0.0.1:24789";
-    const dbPath = flags.db ?? process.env.SQLITE_DB_PATH ?? "./reverse-proxy.db";
+    const baseUrl = flags.url ?? "http://127.0.0.1:24789";
+    const dbPath = flags.db ?? "./reverse-proxy.db";
     const mode = (flags.mode ?? "auto").toLowerCase();
 
     if (!["auto", "http", "db"].includes(mode)) {
@@ -102,6 +102,13 @@ async function main() {
 
     const cmd = positional.join(" ");
     const jsonOut = flags.json;
+
+    const requireHttpManagement = what => {
+        if (mode === "db") {
+            console.error(`${what} requires HTTP management server`);
+            process.exit(2);
+        }
+    };
 
     const out = (data, hint) => {
         console.log(jsonOut ? JSON.stringify(data) : JSON.stringify(data, null, 2));
@@ -126,7 +133,7 @@ async function main() {
                 console.error("domains set requires --file <path.json>");
                 process.exit(2);
             }
-            const body = JSON.parse(readFileSync(flags.file, "utf-8"));
+            const body = readJsonFile(flags.file);
             out(await client.putDomains(body));
             return;
         }
@@ -139,7 +146,7 @@ async function main() {
         if (cmd === "reserve") {
             let body;
             if (flags.file) {
-                body = JSON.parse(readFileSync(flags.file, "utf-8"));
+                body = readJsonFile(flags.file);
             } else if (flags.subdomain && flags.baseDomain && flags.port != null) {
                 body = {
                     subdomain: flags.subdomain,
@@ -165,29 +172,20 @@ async function main() {
         }
 
         if (cmd === "network") {
-            if (mode === "db") {
-                console.error("network requires HTTP management server");
-                process.exit(2);
-            }
+            requireHttpManagement("network");
             out(await client.getNetwork());
             return;
         }
 
         if (cmd === "scan") {
-            if (mode === "db") {
-                console.error("scan requires HTTP management server");
-                process.exit(2);
-            }
-            const body = flags.file ? JSON.parse(readFileSync(flags.file, "utf-8")) : {};
+            requireHttpManagement("scan");
+            const body = flags.file ? readJsonFile(flags.file) : {};
             out(await client.scanPorts(body));
             return;
         }
 
         if (positional[0] === "kill") {
-            if (mode === "db") {
-                console.error("kill requires HTTP management server");
-                process.exit(2);
-            }
+            requireHttpManagement("kill");
             const port = positional[1];
             if (port == null) {
                 console.error("kill <port> requires a port");
@@ -207,17 +205,14 @@ async function main() {
                 console.error("ddns set requires --file <body.json>");
                 process.exit(2);
             }
-            const body = JSON.parse(readFileSync(flags.file, "utf-8"));
+            const body = readJsonFile(flags.file);
             out(await client.putDdns(body));
             return;
         }
 
         if (cmd === "ddns sync") {
-            if (mode === "db") {
-                console.error("ddns sync requires HTTP management server");
-                process.exit(2);
-            }
-            out(await client.postDdnsSync());
+            requireHttpManagement("ddns sync");
+            out(await client.postDdnsSync(flags.job));
             return;
         }
 

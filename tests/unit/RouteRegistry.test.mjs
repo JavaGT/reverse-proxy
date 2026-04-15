@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 import { RouteRegistry } from "../../src/domain/RouteRegistry.mjs";
+import { BaseDomainNotConfiguredError, BaseDomainRequiredError } from "../../src/domain/routeErrors.mjs";
 
 test("RouteRegistry should handle multiple targets and Round-Robin", () => {
     const registry = new RouteRegistry("example.com");
@@ -79,7 +80,21 @@ test("RouteRegistry should release all counters on release", () => {
 
 test("RouteRegistry reserve requires baseDomain", () => {
     const registry = new RouteRegistry("example.com");
-    assert.throws(() => registry.reserve("app", 3000), /baseDomain is required/);
+    assert.throws(
+        () => registry.reserve("app", 3000),
+        err => err instanceof BaseDomainRequiredError
+    );
+});
+
+test("RouteRegistry rejects unlisted baseDomain with BaseDomainNotConfiguredError", () => {
+    const registry = new RouteRegistry("example.com");
+    assert.throws(
+        () => registry.reserve("app", 3000, {}, "other.org"),
+        err =>
+            err instanceof BaseDomainNotConfiguredError &&
+            err.details?.requested === "other.org" &&
+            Array.isArray(err.details?.allowed)
+    );
 });
 
 test("RouteRegistry setRootDomains updates primary and additional roots", () => {

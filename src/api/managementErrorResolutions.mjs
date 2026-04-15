@@ -14,7 +14,7 @@ const RESOLUTIONS = {
     BAD_REQUEST:
         "Send a JSON object with `Content-Type: application/json`. Validate the body against the operation schema in OpenAPI.",
     TOO_MANY_REQUESTS:
-        "Wait and retry, or raise `MANAGEMENT_RATE_LIMIT_MAX` / `MANAGEMENT_RATE_LIMIT_WINDOW_MS` in the server environment.",
+        "Wait and retry, or raise `managementRateLimitMax` / `managementRateLimitWindowMs` in Settings (`PUT /api/v1/settings`).",
     INTERNAL_SERVER_ERROR:
         "Check server logs for the stack trace. Retry after fixing configuration or data; if it persists, capture the request id from logs if present.",
     INVALID_REQUEST:
@@ -24,7 +24,7 @@ const RESOLUTIONS = {
     DOMAIN_CONFLICT:
         "Every existing route must stay under one of the new apex domains. Release orphan routes with `DELETE /api/v1/reserve/:subdomain?baseDomain=...`, then retry `PUT /api/v1/domains`.",
     PERSISTENCE_FAILED:
-        "Ensure `SQLITE_DB_PATH` is writable and the disk is not full. Inspect server logs for the underlying SQLite error.",
+        "Ensure `./reverse-proxy.db` in the server working directory is writable and the disk is not full. Inspect server logs for the underlying SQLite error.",
     SUBDOMAIN_CONFLICT:
         "The host is reserved or blocked while a health-checked route is healthy. Use another subdomain, release the route first, or wait until upstream probes mark targets unhealthy so replace is allowed.",
     RESERVATION_FAILED:

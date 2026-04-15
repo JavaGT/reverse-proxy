@@ -14,7 +14,8 @@ import {
 } from "../infrastructure/dns/console/resolveConsoleLinks.mjs";
 import { collectNetworkStatus } from "../infrastructure/network/networkStatus.mjs";
 import { buildDdnsPublicSummary, mergePutDdnsBody } from "../ddns/ddnsConfigResolve.mjs";
-import { runDdnsSyncOnce } from "../ddns/runDdnsSyncOnce.mjs";
+import { runDdnsSyncCycle } from "../ddns/runDdnsSyncOnce.mjs";
+import { LEGACY_V1_JOB_ID } from "../ddns/ddnsDocument.mjs";
 import { SqliteIpCache } from "../ddns/infrastructure/adapters/SqliteIpCache.mjs";
 import { isValidApexFQDN } from "../shared/utils/isValidApexFqdn.mjs";
 import {
@@ -23,15 +24,44 @@ import {
     subdomainConflictMessage
 } from "./reservationOps.mjs";
 import { deleteManagementAccount, listManagementAccounts } from "./managementAccounts.mjs";
-import { buildPublicSettingsView, SERVER_SETTINGS_RESTART_KEYS } from "../config/serverSettingsRegistry.mjs";
+import {
+    buildPublicSettingsView,
+    mergeServerSettingsSparseWithDefaults,
+    SERVER_SETTINGS_RESTART_KEYS
+} from "../config/serverSettingsRegistry.mjs";
 import { reapplyServerSettingsFromPersistence } from "../config/applyServerSettingsToEnv.mjs";
 import { validateServerSettingsPut } from "../config/validateServerSettingsPut.mjs";
+import { buildServerSettingsUiManifest } from "../config/serverSettingsUi.mjs";
+import {
+    BaseDomainNotConfiguredError,
+    BaseDomainRequiredError,
+    PortValidationError,
+    SubdomainValidationError
+} from "../domain/routeErrors.mjs";
 
 function sendApiError(res, status, code, message, details = null) {
     return sendJsonError(res, status, code, message, details, resolutionForManagementError(code));
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Raw templates; `{{rootDomain}}` / `{{managementAuthNote}}` substituted per request. */
+let cachedOpenApiYaml;
+let cachedLlmsTxt;
+
+function readOpenApiTemplateOnce() {
+    if (cachedOpenApiYaml === undefined) {
+        cachedOpenApiYaml = readFileSync(path.join(__dirname, "openapi.yaml"), "utf-8");
+    }
+    return cachedOpenApiYaml;
+}
+
+function readLlmsTemplateOnce() {
+    if (cachedLlmsTxt === undefined) {
+        cachedLlmsTxt = readFileSync(path.join(__dirname, "llms.txt"), "utf-8");
+    }
+    return cachedLlmsTxt;
+}
 
 /**
  * SRP: Contains the business logic for management API routes.
@@ -45,12 +75,14 @@ export class ManagementController {
     #publicUrlHttpPrefix;
     /** @type {(() => void) | null} */
     #onRootDomainsUpdated;
+    /** @type {() => boolean} */
+    #isDataPlaneActive;
 
     /**
      * @param {*} registry
      * @param {*} persistence
      * @param {*} logger
-     * @param {{ publicUrlHttpsPrefix?: string, publicUrlHttpPrefix?: string, onRootDomainsUpdated?: () => void } | null} [publicUrls]
+     * @param {{ publicUrlHttpsPrefix?: string, publicUrlHttpPrefix?: string, onRootDomainsUpdated?: () => void, isDataPlaneActive?: () => boolean } | null} [publicUrls]
      */
     constructor(registry, persistence, logger, publicUrls = null) {
         this.#registry = registry;
@@ -59,10 +91,60 @@ export class ManagementController {
         this.#publicUrlHttpsPrefix = publicUrls?.publicUrlHttpsPrefix ?? "https";
         this.#publicUrlHttpPrefix = publicUrls?.publicUrlHttpPrefix ?? "http";
         this.#onRootDomainsUpdated = publicUrls?.onRootDomainsUpdated ?? null;
+        this.#isDataPlaneActive =
+            typeof publicUrls?.isDataPlaneActive === "function" ? publicUrls.isDataPlaneActive : () => true;
     }
 
     get registry() {
         return this.#registry;
+    }
+
+    /** Shared by DDNS summary and manual sync (dns console + env for apex filtering). */
+    #getDnsConsoleContext() {
+        return () => ({
+            dnsConsole: this.#persistence.getRootDomainConfig?.()?.dnsConsole ?? null,
+            env: process.env
+        });
+    }
+
+    /**
+     * @param {import("express").Response} res
+     * @param {unknown} error
+     * @param {string} [messagePrefix] - e.g. `reservations[0]` for batch
+     * @returns {boolean} true if a response was sent
+     */
+    /**
+     * Persists non-manual routes after registry mutation. On failure, sends `PERSISTENCE_FAILED` and returns false.
+     * @param {import("express").Response} res
+     * @param {string} logEvent
+     * @param {string} logMessage
+     */
+    async #savePersistentRoutesOrError(res, logEvent, logMessage) {
+        try {
+            await this.#persistence.save(this.#registry.getPersistentRoutes());
+            return true;
+        } catch (persistErr) {
+            this.#logger.error({ event: logEvent, error: persistErr.message }, logMessage);
+            sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            return false;
+        }
+    }
+
+    #sendIfRegistryValidationError(res, error, messagePrefix = "") {
+        const pre = messagePrefix ? `${messagePrefix}: ` : "";
+        if (error instanceof BaseDomainNotConfiguredError) {
+            sendApiError(res, 400, "INVALID_REQUEST", `${pre}${error.message}`, error.details);
+            return true;
+        }
+        if (
+            error instanceof BaseDomainRequiredError ||
+            error instanceof SubdomainValidationError ||
+            error instanceof PortValidationError
+        ) {
+            sendApiError(res, 400, "INVALID_REQUEST", `${pre}${error.message}`, null);
+            return true;
+        }
+        return false;
     }
 
     #publicFieldsForHost(host) {
@@ -83,16 +165,28 @@ export class ManagementController {
             typeof this.#persistence.getDdnsSettings === "function" ? this.#persistence.getDdnsSettings() : null;
         const summary = buildDdnsPublicSummary({
             getApexDomains: () => this.#registry.getRootDomains(),
-            stored
+            stored,
+            getDnsConsoleContext: this.#getDnsConsoleContext()
         });
 
         let cachedPublicIp = null;
+        /** @type {Record<string, { ipv4: string | null, ipv6: string | null } | null>} */
+        const cachedPublicIpByJob = {};
         const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
         if (typeof getDb === "function") {
             try {
-                const cache = new SqliteIpCache(getDb());
-                const ip = await cache.read();
-                cachedPublicIp = ip ? ip.toJSON() : null;
+                const db = getDb();
+                const jobList = Array.isArray(summary.jobs) ? summary.jobs : [];
+                for (const j of jobList) {
+                    if (!j?.id) continue;
+                    const cache = new SqliteIpCache(db, j.id);
+                    const ip = await cache.read();
+                    cachedPublicIpByJob[j.id] = ip ? ip.toJSON() : null;
+                }
+                cachedPublicIp =
+                    cachedPublicIpByJob[LEGACY_V1_JOB_ID] ??
+                    (jobList[0]?.id ? cachedPublicIpByJob[jobList[0].id] : null) ??
+                    null;
             } catch (err) {
                 this.#logger.warn({ event: "mgmt_ddns_cache_read_error", error: err.message }, "DDNS cache read failed");
             }
@@ -101,7 +195,7 @@ export class ManagementController {
         const lastRun =
             typeof this.#persistence.getDdnsLastRun === "function" ? this.#persistence.getDdnsLastRun() : null;
 
-        return { ...summary, cachedPublicIp, lastRun };
+        return { ...summary, cachedPublicIp, cachedPublicIpByJob, lastRun };
     }
 
     getDomains(req, res) {
@@ -180,13 +274,15 @@ export class ManagementController {
                     apexDomains: normalized,
                     dnsConsole: nextDnsConsole
                 });
-                await this.#persistence.save(this.#registry.getPersistentRoutes());
             } catch (persistErr) {
                 this.#logger.error(
                     { event: "mgmt_put_domains_persist_error", error: persistErr.message },
                     "Failed to persist apex domains"
                 );
                 return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            }
+            if (!(await this.#savePersistentRoutesOrError(res, "mgmt_put_domains_persist_error", "Failed to persist routes"))) {
+                return;
             }
 
             this.#onRootDomainsUpdated?.();
@@ -277,14 +373,8 @@ export class ManagementController {
                 { event: "mgmt_reserve", host: payload.host },
                 `Reserved ${payload.host} with ${payload.targets.length} target(s)`
             );
-            try {
-                await this.#persistence.save(this.#registry.getPersistentRoutes());
-            } catch (persistErr) {
-                this.#logger.error(
-                    { event: "mgmt_reserve_persist_error", error: persistErr.message },
-                    "Failed to persist routes after reserve"
-                );
-                return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            if (!(await this.#savePersistentRoutesOrError(res, "mgmt_reserve_persist_error", "Failed to persist routes after reserve"))) {
+                return;
             }
 
             res.status(201).json({ data: payload });
@@ -293,9 +383,7 @@ export class ManagementController {
             if (error instanceof ReserveValidationError) {
                 return sendApiError(res, 400, error.code, error.message, null);
             }
-            if (error.message.includes("is not configured") && error.message.includes("allowed:")) {
-                return sendApiError(res, 400, "INVALID_REQUEST", error.message, null);
-            }
+            if (this.#sendIfRegistryValidationError(res, error)) return;
             sendApiError(res, 400, "RESERVATION_FAILED", error.message, null);
         }
     }
@@ -371,9 +459,7 @@ export class ManagementController {
                 );
             } catch (err) {
                 this.#rollbackReserveBatch(createdStack);
-                if (err.message.includes("is not configured") && err.message.includes("allowed:")) {
-                    return sendApiError(res, 400, "INVALID_REQUEST", `reservations[${i}]: ${err.message}`, null);
-                }
+                if (this.#sendIfRegistryValidationError(res, err, `reservations[${i}]`)) return;
                 return sendApiError(res, 400, "RESERVATION_FAILED", `reservations[${i}]: ${err.message}`, null);
             }
 
@@ -394,15 +480,11 @@ export class ManagementController {
             }
         }
 
-        try {
-            await this.#persistence.save(this.#registry.getPersistentRoutes());
-        } catch (persistErr) {
-            this.#logger.error(
-                { event: "mgmt_reserve_batch_persist_error", error: persistErr.message },
-                "Failed to persist batch reservations"
-            );
+        if (
+            !(await this.#savePersistentRoutesOrError(res, "mgmt_reserve_batch_persist_error", "Failed to persist batch reservations"))
+        ) {
             this.#rollbackReserveBatch(createdStack);
-            return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            return;
         }
 
         const anyCreated = results.some(r => r.outcome === "created");
@@ -424,22 +506,14 @@ export class ManagementController {
             }
 
             this.#logger.info({ event: "mgmt_release", host: result.host }, `Released ${result.host}`);
-            try {
-                await this.#persistence.save(this.#registry.getPersistentRoutes());
-            } catch (persistErr) {
-                this.#logger.error(
-                    { event: "mgmt_release_persist_error", error: persistErr.message },
-                    "Failed to persist routes after release"
-                );
-                return sendApiError(res, 500, "PERSISTENCE_FAILED", persistErr.message, null);
+            if (!(await this.#savePersistentRoutesOrError(res, "mgmt_release_persist_error", "Failed to persist routes after release"))) {
+                return;
             }
 
             res.status(200).json({ data: { ...result, ...this.#publicFieldsForHost(result.host) } });
         } catch (error) {
             this.#logger.error({ event: "mgmt_release_error", error: error.message }, "Release failed");
-            if (error.message.includes("baseDomain is required")) {
-                return sendApiError(res, 400, "INVALID_REQUEST", error.message, null);
-            }
+            if (this.#sendIfRegistryValidationError(res, error)) return;
             sendApiError(res, 400, "RELEASE_FAILED", error.message, null);
         }
     }
@@ -500,7 +574,19 @@ export class ManagementController {
     }
 
     getHealth(req, res) {
-        res.status(200).json({ data: { status: "OK" } });
+        const dataPlaneActive = this.#isDataPlaneActive();
+        res.status(200).json({
+            data: {
+                status: "OK",
+                dataPlaneActive,
+                ...(dataPlaneActive
+                    ? {}
+                    : {
+                          notice:
+                              "HTTPS proxy (ports 80/443) is not running. Set tlsCertDir in Settings or TLS_CERT_DIR in the environment, then restart the process."
+                      })
+            }
+        });
     }
 
     /**
@@ -508,7 +594,10 @@ export class ManagementController {
      * Allowed for same-machine operators or signed-in sessions (see ManagementServer `#requireAuth`).
      */
     getRegistrationSecret(req, res) {
-        const secret = process.env.MANAGEMENT_REGISTRATION_SECRET?.trim();
+        const sparse =
+            typeof this.#persistence.getServerSettings === "function" ? this.#persistence.getServerSettings() : {};
+        const merged = mergeServerSettingsSparseWithDefaults(sparse);
+        const secret = String(merged.managementRegistrationSecret ?? "").trim();
         if (!secret) {
             res.status(200).json({ data: { configured: false, secret: null } });
             return;
@@ -517,7 +606,7 @@ export class ManagementController {
     }
 
     /**
-     * Effective server settings (SQLite overrides on top of `.env`).
+     * Effective server settings (SQLite `server_settings` merged with built-in defaults).
      */
     getServerSettings(req, res) {
         if (typeof this.#persistence.getServerSettings !== "function") {
@@ -529,7 +618,8 @@ export class ManagementController {
             res.status(200).json({
                 data: {
                     ...view,
-                    bootstrapEnvKeys: ["SQLITE_DB_PATH", "NODE_ENV"]
+                    bootstrapEnvKeys: [],
+                    ui: buildServerSettingsUiManifest()
                 }
             });
         } catch (error) {
@@ -539,7 +629,7 @@ export class ManagementController {
     }
 
     /**
-     * Save partial settings to SQLite and merge into the running process (`process.env`).
+     * Save partial settings to SQLite and merge into the running process.
      */
     putServerSettings(req, res) {
         if (typeof this.#persistence.saveServerSettingsPartial !== "function") {
@@ -566,7 +656,8 @@ export class ManagementController {
                     notice:
                         restartRecommended || clearedRestartish
                             ? "Restart the reverse-proxy process for listener port, TLS directory, health-check interval, session secret, trust proxy, rate limits, or auth data path changes to apply everywhere."
-                            : "Running process updated where possible; trust proxy and rate limits may still require a restart."
+                            : "Running process updated where possible; trust proxy and rate limits may still require a restart.",
+                    ui: buildServerSettingsUiManifest()
                 }
             });
         } catch (error) {
@@ -713,11 +804,18 @@ export class ManagementController {
                 );
             }
 
-            const result = await runDdnsSyncOnce({
-                persistence: this.#persistence,
-                getApexDomains: () => this.#registry.getRootDomains(),
-                logger: this.#logger
-            });
+            const jobIdRaw = req.query?.jobId != null ? String(req.query.jobId).trim() : "";
+            const jobId = jobIdRaw || undefined;
+
+            const result = await runDdnsSyncCycle(
+                {
+                    persistence: this.#persistence,
+                    getApexDomains: () => this.#registry.getRootDomains(),
+                    getDnsConsoleContext: this.#getDnsConsoleContext(),
+                    logger: this.#logger
+                },
+                { force: true, jobId }
+            );
 
             if (!result.ran) {
                 return sendApiError(
@@ -739,8 +837,7 @@ export class ManagementController {
 
     getOpenApi(req, res) {
         try {
-            const docPath = path.join(__dirname, "openapi.yaml");
-            let yaml = readFileSync(docPath, "utf-8");
+            let yaml = readOpenApiTemplateOnce();
             const rootDomain = this.#registry.rootDomain;
             yaml = yaml.replace(/\{\{rootDomain\}\}/g, rootDomain);
             res.set("Content-Type", "application/yaml; charset=utf-8");
@@ -753,8 +850,7 @@ export class ManagementController {
 
     getLlmInstructions(req, res) {
         try {
-            const templatePath = path.join(__dirname, "llms.txt");
-            let instructions = readFileSync(templatePath, "utf-8");
+            let instructions = readLlmsTemplateOnce();
 
             const rootDomain = this.#registry.rootDomain;
             const authNote =

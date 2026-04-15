@@ -202,33 +202,36 @@ async function buildDnsReport(registry, options = {}) {
 
     const apexDomains = registry.getRootDomains();
 
-    /** @type {object[]} */
-    const rows = [];
-
-    for (const apex of apexDomains) {
-        const apexRes = await resolveHostDns(apex, dnsTimeoutMs);
-        rows.push({
-            rowKind: "apex",
-            label: "Apex",
-            displayName: apex,
-            queryName: apex,
-            ipv4: apexRes.ipv4,
-            ipv6: apexRes.ipv6,
-            errors: apexRes.errors
-        });
-
-        const probeHost = `${wildcardToken}.${apex}`;
-        const wildRes = await resolveHostDns(probeHost, dnsTimeoutMs);
-        rows.push({
-            rowKind: "wildcard",
-            label: "Catch-all",
-            displayName: `*.${apex}`,
-            queryName: probeHost,
-            ipv4: wildRes.ipv4,
-            ipv6: wildRes.ipv6,
-            errors: wildRes.errors
-        });
-    }
+    const rowGroups = await Promise.all(
+        apexDomains.map(async apex => {
+            const probeHost = `${wildcardToken}.${apex}`;
+            const [apexRes, wildRes] = await Promise.all([
+                resolveHostDns(apex, dnsTimeoutMs),
+                resolveHostDns(probeHost, dnsTimeoutMs)
+            ]);
+            return [
+                {
+                    rowKind: "apex",
+                    label: "Apex",
+                    displayName: apex,
+                    queryName: apex,
+                    ipv4: apexRes.ipv4,
+                    ipv6: apexRes.ipv6,
+                    errors: apexRes.errors
+                },
+                {
+                    rowKind: "wildcard",
+                    label: "Catch-all",
+                    displayName: `*.${apex}`,
+                    queryName: probeHost,
+                    ipv4: wildRes.ipv4,
+                    ipv6: wildRes.ipv6,
+                    errors: wildRes.errors
+                }
+            ];
+        })
+    );
+    const rows = rowGroups.flat();
 
     return { rows, wildcardProbeToken: wildcardToken };
 }
@@ -241,8 +244,10 @@ export async function collectNetworkStatus(registry) {
     const ingressProbeTimeoutMs = parseTimeoutMs(process.env.PUBLIC_INGRESS_PROBE_TIMEOUT_MS, 5000);
 
     const localAddresses = getLocalAddresses();
-    const publicIp = await lookupPublicIps({ ipLookupTimeoutMs });
-    const dnsReport = await buildDnsReport(registry, { dnsTimeoutMs });
+    const [publicIp, dnsReport] = await Promise.all([
+        lookupPublicIps({ ipLookupTimeoutMs }),
+        buildDnsReport(registry, { dnsTimeoutMs })
+    ]);
 
     const rows = dnsReport.rows.map(r => ({
         ...r,

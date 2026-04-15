@@ -71,13 +71,61 @@ export function effectiveManagementClientIp(req) {
 }
 
 /**
- * True when the **logical** client is loopback (uses forwarded IP when it differs from the TCP peer).
- * Use for skipping remote auth when the operator is on the same machine as the proxy.
+ * Forwarding headers alone are not enough to infer a reverse proxy: some clients/extensions
+ * intermittently send `X-Forwarded-For` / `X-Real-IP` on direct loopback hits. We only treat the
+ * request as “proxied” when Express’s apparent client (`req.ip`) **differs** from the TCP peer in a
+ * way that indicates a **non-loopback** logical client (typical nginx → Node on 127.0.0.1). If both
+ * addresses are loopback (e.g. `127.0.0.1` vs `::1`), that is still a local connection.
+ *
+ * @param {import("http").IncomingMessage & { ip?: string }} req
+ */
+function forwardingIndicatesRemoteLogicalClient(req) {
+    if (!hasForwardingClientHint(req)) return false;
+    const socketIp = socketRemoteIpString(req);
+    const expressIp = normalizeIpString(typeof req.ip === "string" ? req.ip : "");
+    if (!socketIp || !expressIp) return false;
+    if (normalizeComparableIp(socketIp) === normalizeComparableIp(expressIp)) return false;
+    if (isLoopbackAddr(socketIp) && isLoopbackAddr(expressIp)) return false;
+    return true;
+}
+
+/**
+ * True when the client should be treated as loopback for management local-operator checks.
+ *
+ * If the TCP peer is loopback and there is **no** real reverse-proxy signature (forwarding headers
+ * that make `req.ip` a **non-loopback** logical client), we trust the connection as a direct local
+ * hit (e.g. browser to `http://127.0.0.1:24789`) even when Express `trust proxy` has set `req.ip`
+ * oddly — a common misconfiguration with `MANAGEMENT_TRUST_PROXY=1` and no reverse proxy in front
+ * of the management port.
+ *
+ * When forwarding indicates a **remote** logical client (e.g. nginx → Node on loopback), the
+ * effective client IP is used.
+ *
  * @param {import("http").IncomingMessage & { ip?: string }} req
  */
 export function managementClientIsLoopback(req) {
+    const socketIp = socketRemoteIpString(req);
+    if (socketIp && isLoopbackAddr(socketIp) && !forwardingIndicatesRemoteLogicalClient(req)) {
+        return true;
+    }
     const ip = effectiveManagementClientIp(req);
     return !!(ip && isLoopbackAddr(ip));
+}
+
+/**
+ * @param {import("http").IncomingMessage} req
+ * @returns {boolean}
+ */
+function hasForwardingClientHint(req) {
+    const h = req.headers;
+    if (!h || typeof h !== "object") return false;
+    const xff = h["x-forwarded-for"];
+    if (typeof xff === "string" && xff.trim()) return true;
+    if (Array.isArray(xff) && String(xff[0] ?? "").trim()) return true;
+    const xr = h["x-real-ip"];
+    if (typeof xr === "string" && xr.trim()) return true;
+    if (Array.isArray(xr) && String(xr[0] ?? "").trim()) return true;
+    return false;
 }
 
 /**
@@ -236,15 +284,63 @@ function machineComparableIpSet(ttlMs = 10_000) {
 }
 
 /**
+ * Header set only by this process’s HTTPS data plane when proxying to the loopback management
+ * listener: TLS peer IP is this host (loopback, local interface, egress cache, or
+ * MANAGEMENT_LOCAL_OPERATOR_IPS). Never trust from untrusted clients; only meaningful with TCP
+ * peer 127.0.0.1/::1 to management (internal hop).
+ */
+export const MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER = "x-management-data-plane-same-host";
+
+/** Normalized public IPs from SQLite `meta.ddns_public_ip*` (DDNS last synced WAN). */
+let persistedDdnsPublicComparableIps = new Set();
+
+/**
+ * Replaces the set of comparable IPs derived from persisted DDNS public addresses (see
+ * {@link SqlitePersistence#getDdnsPublicIpAddressesForLocalOperatorHint}).
+ * @param {string[]} rawAddresses
+ */
+export function setPersistedDdnsPublicIpsForLocalOperator(rawAddresses) {
+    const next = new Set();
+    for (const raw of rawAddresses) {
+        const n = normalizeComparableIp(raw);
+        if (n) next.add(n);
+    }
+    persistedDdnsPublicComparableIps = next;
+}
+
+function persistedDdnsPublicComparableSet() {
+    return persistedDdnsPublicComparableIps;
+}
+
+/**
+ * True when the given address (TLS client to :443) is the same machine as this process, using the
+ * same rules as local-operator matching (iface / egress / env), for tagging the internal proxy hop.
+ *
+ * @param {string | null | undefined} peerRaw
+ * @returns {boolean}
+ */
+export function isDataPlaneTlsPeerSameHost(peerRaw) {
+    const n = normalizeComparableIp(peerRaw);
+    if (!n) return false;
+    if (isLoopbackAddr(n)) return true;
+    const ifaces = machineComparableIpSet();
+    if (ifaces.has(n)) return true;
+    if (extraLocalOperatorComparableIps().has(n)) return true;
+    if (publicEgressComparableIpSet().has(n)) return true;
+    if (persistedDdnsPublicComparableSet().has(n)) return true;
+    return false;
+}
+
+/**
  * @typedef {{
  *   sameMachine: boolean,
- *   reason: 'loopback' | 'machine_iface' | 'extra_env' | 'public_egress' | 'none',
+ *   reason: 'loopback' | 'machine_iface' | 'extra_env' | 'public_egress' | 'ddns_meta_public' | 'data_plane_same_host' | 'none',
  *   socketPeer: string | null,
  *   expressIp: string | null,
  *   forwardedFor: string | undefined,
  *   xRealIp: string | undefined,
  *   effectiveClientIp: string | null,
- *   candidateChecks: Array<{ raw: string, normalized: string | null, inMachine: boolean, inExtra: boolean, inEgress: boolean }>,
+ *   candidateChecks: Array<{ raw: string, normalized: string | null, inMachine: boolean, inExtra: boolean, inEgress: boolean, inDdnsMeta: boolean }>,
  *   machineIfaceCount: number,
  *   extraEnvIpCount: number,
  *   egressIpv4Comparable: string | null,
@@ -269,6 +365,7 @@ export function resolveManagementLocalOperator(req) {
     const set = machineComparableIpSet();
     const extra = extraLocalOperatorComparableIps();
     const egress = publicEgressComparableIpSet();
+    const ddnsMeta = persistedDdnsPublicComparableSet();
     const egressSnap = activePublicEgressComparableIps();
     const autoPublicEgressDisabled = isAutoPublicEgressDisabled();
 
@@ -290,15 +387,40 @@ export function resolveManagementLocalOperator(req) {
         };
     }
 
+    // Internal HTTPS → loopback management: data plane certifies TLS peer was this host (hairpin /
+    // iface / egress), so we skip session even when X-Forwarded-For alone would not match yet.
+    if (
+        socketPeer &&
+        isLoopbackAddr(socketPeer) &&
+        getIncomingHeader(req, MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER) === "1"
+    ) {
+        return {
+            sameMachine: true,
+            reason: "data_plane_same_host",
+            socketPeer,
+            expressIp,
+            forwardedFor,
+            xRealIp,
+            effectiveClientIp,
+            candidateChecks: [],
+            machineIfaceCount: set.size,
+            extraEnvIpCount: extra.size,
+            egressIpv4Comparable: egressSnap.ipv4,
+            egressIpv6Comparable: egressSnap.ipv6,
+            autoPublicEgressDisabled
+        };
+    }
+
     const candidateChecks = [];
     for (const raw of managementSameMachineCandidateIps(req)) {
         const normalized = normalizeComparableIp(raw);
         const inMachine = !!(normalized && set.has(normalized));
         const inExtra = !!(normalized && extra.has(normalized));
         const inEgress = !!(normalized && egress.has(normalized));
-        candidateChecks.push({ raw, normalized, inMachine, inExtra, inEgress });
+        const inDdnsMeta = !!(normalized && ddnsMeta.has(normalized));
+        candidateChecks.push({ raw, normalized, inMachine, inExtra, inEgress, inDdnsMeta });
     }
-    const hit = candidateChecks.find(c => c.inMachine || c.inExtra || c.inEgress);
+    const hit = candidateChecks.find(c => c.inMachine || c.inExtra || c.inEgress || c.inDdnsMeta);
     const sameMachine = !!hit;
     const reason = !sameMachine
         ? "none"
@@ -306,7 +428,9 @@ export function resolveManagementLocalOperator(req) {
           ? "machine_iface"
           : hit.inExtra
             ? "extra_env"
-            : "public_egress";
+            : hit.inEgress
+              ? "public_egress"
+              : "ddns_meta_public";
 
     return {
         sameMachine,

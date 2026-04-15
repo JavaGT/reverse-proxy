@@ -1,13 +1,13 @@
-import { getRuntimeDdnsTick } from "../ddnsConfigResolve.mjs";
-import { runDdnsSyncOnce } from "../runDdnsSyncOnce.mjs";
+import { getDdnsSchedulerPlan } from "../ddnsConfigResolve.mjs";
+import { runDdnsSyncCycle } from "../runDdnsSyncOnce.mjs";
 
 /**
  * Wires DDNS: reloads config from SQLite on each cycle so management UI changes apply without restart.
- * @param {{ persistence: { getDatabaseSync: () => import("node:sqlite").DatabaseSync, getDdnsSettings?: () => object | null }, logger: object, getApexDomains?: () => string[] }} ctx
+ * @param {{ persistence: { getDatabaseSync: () => import("node:sqlite").DatabaseSync, getDdnsSettings?: () => object | null }, logger: object, getApexDomains?: () => string[], getDnsConsoleContext?: () => { dnsConsole?: object | null, env?: object } | null | undefined }} ctx
  * @returns {() => void}
  */
 export function startDdnsScheduler(ctx) {
-    const { persistence, logger, getApexDomains } = ctx;
+    const { persistence, logger, getApexDomains, getDnsConsoleContext } = ctx;
 
     let stopped = false;
     let timeoutId = null;
@@ -40,23 +40,27 @@ export function startDdnsScheduler(ctx) {
     async function runCycle() {
         if (stopped) return;
 
-        const tick = getRuntimeDdnsTick({ persistence, getApexDomains });
+        const plan = getDdnsSchedulerPlan({ persistence, getApexDomains, getDnsConsoleContext }, Date.now());
 
-        if (tick.logReason && !tick.shouldRun) {
-            logSkipOnce(tick.logReason, tick.logMessage);
+        if (plan.logReason && plan.dueJobs.length === 0) {
+            logSkipOnce(plan.logReason, plan.logMessage);
         } else {
             lastSkipLog = "";
         }
 
-        if (tick.shouldRun && tick.apiKey && tick.secretKey && tick.domains?.length) {
+        if (plan.dueJobs.length > 0) {
             try {
-                await runDdnsSyncOnce({ persistence, getApexDomains, logger });
+                await runDdnsSyncCycle(
+                    { persistence, getApexDomains, getDnsConsoleContext, logger },
+                    { force: false }
+                );
             } catch (err) {
                 logger.error({ event: "ddns_interval_error", err: err.message }, err.stack);
             }
         }
 
-        schedule(tick.nextDelayMs ?? 60_000);
+        const nextPlan = getDdnsSchedulerPlan({ persistence, getApexDomains, getDnsConsoleContext }, Date.now());
+        schedule(nextPlan.nextDelayMs ?? 60_000);
     }
 
     logger.info({ event: "ddns_scheduler_loop_start" }, "DDNS scheduler loop started (config from SQLite each cycle)");

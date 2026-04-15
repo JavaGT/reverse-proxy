@@ -34,7 +34,7 @@ export async function hydrateRegistryFromPersistence(persistence, env, options =
     const log = options.logger ?? {};
 
     if (fromDb?.length) {
-        log.info?.({ apexDomains: fromDb }, "Apex domains loaded from SQLite (override ROOT_DOMAINS env)");
+        log.info?.({ apexDomains: fromDb }, "Apex domains loaded from SQLite (override default root domains)");
     }
 
     const registry = new RouteRegistry(effectiveRoots[0], {

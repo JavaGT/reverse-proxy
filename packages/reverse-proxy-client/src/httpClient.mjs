@@ -89,6 +89,11 @@ export function createHttpClient(options) {
         /** @param {Record<string, unknown>} body */
         putDdns: body => request("/api/v1/ddns", { method: "PUT", body: JSON.stringify(body) }),
         deleteDdns: () => request("/api/v1/ddns", { method: "DELETE" }),
-        postDdnsSync: () => request("/api/v1/ddns/sync", { method: "POST" })
+        /** @param {string} [jobId] - Optional query; sync only this DDNS job */
+        postDdnsSync: jobId => {
+            const u = new URL("/api/v1/ddns/sync", "http://_");
+            if (jobId) u.searchParams.set("jobId", String(jobId));
+            return request(`${u.pathname}${u.search}`, { method: "POST" });
+        }
     };
 }

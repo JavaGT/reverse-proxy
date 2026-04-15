@@ -6,18 +6,45 @@
     <title>Create account · Reverse proxy management</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body class="mgmt-login-page">
-    <rp-mgmt-header tagline="Management · Create account" brand-href="index.html#overview" tools="signout,theme" current="none"></rp-mgmt-header>
+    <rp-mgmt-header tagline="Management · Create account" brand-href="index.html#overview" tools="signout,theme"></rp-mgmt-header>
 
-    <main id="main-content" class="mgmt-page">
-        <rp-auth-register></rp-auth-register>
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="auth" current="register"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="About registration">
+                    <p class="mgmt-p">Create a management account when your operator has enabled registration. You need the invite secret from the <a href="accounts.html">Accounts</a> page.</p>
+                </div>
+                <rp-auth-register></rp-auth-register>
+            </div>
+        </div>
     </main>
     <script type="module" src="/mgmt-register.mjs"></script>
 </body>

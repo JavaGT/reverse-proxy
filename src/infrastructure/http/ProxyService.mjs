@@ -16,6 +16,11 @@ const HOP_BY_HOP_HEADERS = new Set([
 
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
+/** Mirrors SQLite `logRequests` (synced to `LOG_REQUESTS` at process start). */
+function logRequestsEnabled() {
+    return process.env.LOG_REQUESTS === "true";
+}
+
 /**
  * SRP: Orchestrates HTTP and WebSocket proxying with HA and Observability.
  * Encapsulated: Uses private class fields and methods.
@@ -41,32 +46,26 @@ export class ProxyService {
             clientIp: req.socket.remoteAddress
         });
 
-        const host = req.headers.host?.split(":")[0];
-        const route = host ? this.#registry.getRoute(host) : undefined;
-
-        if (!route) {
-            log.warn({ event: "proxy_route_not_found" }, `No route found for host: ${host}`);
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Not found");
-            return;
-        }
-
-        // 🛡️ IP Allowlisting
-        if (!this.#isIpAllowed(req, route.options?.allowlist)) {
-            log.warn({ event: "proxy_access_denied" }, `Access denied for IP to host: ${host}`);
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden");
-            return;
-        }
-
-        // ⚖️ Load Balancing
-        const targetUrl = this.#registry.getTarget(host);
-        if (!targetUrl) {
-            log.error({ event: "proxy_no_healthy_targets" }, `No healthy targets available for: ${host}`);
+        const resolved = this.#resolveRouteAndTarget(req);
+        if (!resolved.ok) {
+            if (resolved.reason === "no_route") {
+                log.warn({ event: "proxy_route_not_found" }, `No route found for host: ${resolved.host ?? ""}`);
+                res.writeHead(404, { "Content-Type": "text/plain" });
+                res.end("Not found");
+                return;
+            }
+            if (resolved.reason === "forbidden") {
+                log.warn({ event: "proxy_access_denied" }, `Access denied for IP to host: ${resolved.host}`);
+                res.writeHead(403, { "Content-Type": "text/plain" });
+                res.end("Forbidden");
+                return;
+            }
+            log.error({ event: "proxy_no_healthy_targets" }, `No healthy targets available for: ${resolved.host}`);
             res.writeHead(503, { "Content-Type": "text/plain" });
             res.end("Service Unavailable");
             return;
         }
+        const { host, targetUrl } = resolved;
 
         const { hostname, port } = this.#parseTarget(targetUrl);
         const extraHeaders = { 
@@ -77,7 +76,8 @@ export class ProxyService {
 
         let isUpstreamEnded = false;
 
-        log.info({ event: "proxy_request_start", target: targetUrl }, `Proxying to ${targetUrl}`);
+        const logDetail = logRequestsEnabled() ? log.info.bind(log) : log.debug.bind(log);
+        logDetail({ event: "proxy_request_start", target: targetUrl }, `Proxying to ${targetUrl}`);
 
         const upstreamReq = http.request(
             { hostname, port, path: req.url, method: req.method, headers },
@@ -92,11 +92,14 @@ export class ProxyService {
 
                 upstreamRes.on("end", () => {
                     isUpstreamEnded = true;
-                    log.info({ 
-                        event: "proxy_request_complete", 
-                        status: upstreamRes.statusCode,
-                        duration: Date.now() - startTime 
-                    }, `Completed with ${upstreamRes.statusCode}`);
+                    logDetail(
+                        {
+                            event: "proxy_request_complete",
+                            status: upstreamRes.statusCode,
+                            duration: Date.now() - startTime
+                        },
+                        `Completed with ${upstreamRes.statusCode}`
+                    );
                 });
             }
         );
@@ -134,27 +137,19 @@ export class ProxyService {
             clientIp: req.socket.remoteAddress
         });
 
-        const host = req.headers.host?.split(":")[0];
-        const route = host ? this.#registry.getRoute(host) : undefined;
-
-        if (!route) {
-            log.warn("No route found for WebSocket upgrade");
+        const resolved = this.#resolveRouteAndTarget(req);
+        if (!resolved.ok) {
+            if (resolved.reason === "no_route") {
+                log.warn("No route found for WebSocket upgrade");
+            } else if (resolved.reason === "forbidden") {
+                log.warn("WebSocket access denied for IP");
+            } else {
+                log.error("No healthy targets available for WebSocket");
+            }
             socket.destroy();
             return;
         }
-
-        if (!this.#isIpAllowed(req, route.options?.allowlist)) {
-            log.warn("WebSocket access denied for IP");
-            socket.destroy();
-            return;
-        }
-
-        const targetUrl = this.#registry.getTarget(host);
-        if (!targetUrl) {
-            log.error("No healthy targets available for WebSocket");
-            socket.destroy();
-            return;
-        }
+        const { host, targetUrl } = resolved;
 
         const { hostname, port } = this.#parseTarget(targetUrl);
 
@@ -164,8 +159,9 @@ export class ProxyService {
 
         const conn = net.createConnection({ host: hostname, port });
 
+        const logDetail = logRequestsEnabled() ? log.info.bind(log) : log.debug.bind(log);
         conn.once("connect", () => {
-            log.info({ target: targetUrl }, `WebSocket tunnel established to ${targetUrl}`);
+            logDetail({ target: targetUrl }, `WebSocket tunnel established to ${targetUrl}`);
             conn.write(this.#buildRawUpgradeRequest(req));
             if (head && head.length > 0) {
                 conn.write(head);
@@ -190,6 +186,29 @@ export class ProxyService {
 
     createHttpsHandler() {
         return (req, res) => this.handleHttpRequest(req, res);
+    }
+
+    /**
+     * @param {import("node:http").IncomingMessage} req
+     * @returns {{ ok: true, host: string, targetUrl: string } | { ok: false, reason: "no_route" | "forbidden" | "no_healthy", host?: string }}
+     */
+    #resolveRouteAndTarget(req) {
+        const host = req.headers.host?.split(":")[0];
+        if (!host) {
+            return { ok: false, reason: "no_route" };
+        }
+        const route = this.#registry.getRoute(host);
+        if (!route) {
+            return { ok: false, reason: "no_route", host };
+        }
+        if (!this.#isIpAllowed(req, route.options?.allowlist)) {
+            return { ok: false, reason: "forbidden", host };
+        }
+        const targetUrl = this.#registry.getTarget(host);
+        if (!targetUrl) {
+            return { ok: false, reason: "no_healthy", host };
+        }
+        return { ok: true, host, targetUrl };
     }
 
     #isIpAllowed(req, allowlist) {

@@ -81,10 +81,14 @@ export class ManagementServer {
         this.#setup();
     }
 
+    /** @param {import("node:net").AddressInfo | string | null | undefined} address */
+    #tcpPortFromAddress(address) {
+        return typeof address === "object" && address != null ? address.port : null;
+    }
+
     get port() {
         if (!this.#server) return null;
-        const address = this.#server.address();
-        return typeof address === "object" && address != null ? address.port : null;
+        return this.#tcpPortFromAddress(this.#server.address());
     }
 
     /** @param {import("node:net").AddressInfo | string | null} address */
@@ -125,7 +129,7 @@ export class ManagementServer {
                 }
 
                 const address = this.#server.address();
-                let port = typeof address === "object" && address != null ? address.port : null;
+                let port = this.#tcpPortFromAddress(address);
                 if (port == null && this.#listenPort > 0 && this.#server.listening) {
                     this.#logger.warn(
                         {
@@ -305,7 +309,7 @@ export class ManagementServer {
 
         setupAuth(this.#app, {
             dataDir: authDataDir,
-            exposeErrors: process.env.NODE_ENV !== "production",
+            exposeErrors: false,
             sdkRoute: "/management-auth-sdk.js",
             logger: easyLogger,
             enableApiKeys: false,

@@ -25,16 +25,17 @@ export class RpRoutesPanel extends HTMLElement {
     async render(options = {}) {
         const silent = options.silent === true;
         if (!silent) {
-            this.innerHTML = "<p class=\"mgmt-p mgmt-note\">Loading routes…</p>";
+            this.innerHTML = "<p class=\"mgmt-p mgmt-note\" aria-live=\"polite\">Loading routes…</p>";
         }
         try {
             const { data: routes } = await apiFetch("/api/v1/routes");
             const toolbar = `
                 <rp-panel-toolbar heading="Routes">
                     <button type="button" slot="actions" class="mgmt-btn mgmt-btn-primary" data-open-reserve>Add route</button>
-                </rp-panel-toolbar>`;
+                </rp-panel-toolbar>
+                <p class="mgmt-p mgmt-muted">Each row is one public hostname and where traffic is sent on this host. Use <strong>Add route</strong> to reserve a subdomain and point it at local ports.</p>`;
             if (!routes.length) {
-                this.innerHTML = `${toolbar}<p class=\"mgmt-p\">No routes.</p>`;
+                this.innerHTML = `${toolbar}<p class=\"mgmt-p\">You do not have any routes yet. Choose <strong>Add route</strong> to reserve a hostname and wire it to your apps.</p>`;
                 this.#wireOpenReserve();
                 return;
             }

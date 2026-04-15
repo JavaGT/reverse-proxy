@@ -1,27 +1,7 @@
 /**
- * App chrome: skip link + top bar (brand, tools, section + external nav).
- * Attributes: tagline, brand-href, tools (comma: signout,theme,help,refresh), current (settings|accounts|ddns|none).
+ * App chrome: skip link + top bar (brand, tools only — section links live in rp-mgmt-sidebar).
+ * Attributes: tagline, brand-href, tools (comma: signout,theme,help,refresh).
  */
-
-function externalNavRow(current) {
-    const settings =
-        current === "settings"
-            ? `<span class="mgmt-app-nav-current" aria-current="page">Settings</span>`
-            : `<a href="settings.html" title="Server settings (SQLite)">Settings</a>`;
-    const accounts =
-        current === "accounts"
-            ? `<span class="mgmt-app-nav-current" aria-current="page">Accounts</span>`
-            : `<a href="accounts.html" title="Accounts and registration invite">Accounts</a>`;
-    const ddns =
-        current === "ddns"
-            ? `<span class="mgmt-app-nav-current" aria-current="page">DDNS</span>`
-            : `<a href="ddns.html" class="mgmt-app-nav-ddns" title="DDNS settings (separate page)">DDNS</a>`;
-    return `${settings}
-                    <span class="mgmt-app-nav-ddns-sep" aria-hidden="true">·</span>
-                    ${accounts}
-                    <span class="mgmt-app-nav-ddns-sep" aria-hidden="true">·</span>
-                    ${ddns}`;
-}
 
 export class RpMgmtHeader extends HTMLElement {
     connectedCallback() {
@@ -30,10 +10,6 @@ export class RpMgmtHeader extends HTMLElement {
 
         const tagline = this.getAttribute("tagline") || "";
         const brandHref = this.getAttribute("brand-href") ?? "index.html#overview";
-        const current = this.getAttribute("current") || "none";
-        const hashOnly = this.getAttribute("section-links") === "hash";
-        const ix = hashOnly ? "" : "index.html";
-        const h = id => (ix ? `${ix}#${id}` : `#${id}`);
         const tools = (this.getAttribute("tools") || "signout,theme,help,refresh")
             .split(",")
             .map(s => s.trim())
@@ -42,7 +18,7 @@ export class RpMgmtHeader extends HTMLElement {
         const parts = [];
         if (tools.includes("signout")) {
             parts.push(
-                `<button type="button" class="mgmt-btn" id="mgmt-sign-out" title="End session">Sign out</button>`
+                `<button type="button" class="mgmt-btn" id="mgmt-sign-out" title="End session" aria-label="Sign out of management">Sign out</button>`
             );
         }
         if (tools.includes("theme")) {
@@ -52,11 +28,13 @@ export class RpMgmtHeader extends HTMLElement {
             );
         }
         if (tools.includes("help")) {
-            parts.push(`<button type="button" class="mgmt-btn" id="open-help" title="Help (?)">Help</button>`);
+            parts.push(
+                `<button type="button" class="mgmt-btn" id="open-help" title="Help (?) column meanings and badges" aria-label="Open help">Help</button>`
+            );
         }
         if (tools.includes("refresh")) {
             parts.push(
-                `<button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all">Refresh</button>`
+                `<button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all" aria-label="Reload data on this page">Refresh page</button>`
             );
         }
 
@@ -71,20 +49,6 @@ export class RpMgmtHeader extends HTMLElement {
         <div class="mgmt-app-tools">
             ${parts.join("\n            ")}
         </div>
-        <nav class="mgmt-app-nav" aria-label="Page sections">
-            <span class="mgmt-app-nav-main">
-                <a href="${h("overview")}">Overview</a>
-                <a href="${h("routes")}">Routes</a>
-                <a href="${h("domains")}">Domains</a>
-                <a href="${h("network")}">Network</a>
-                <a href="${h("scanner")}">Scanner</a>
-                <a href="${h("api")}">API</a>
-            </span>
-            <span class="mgmt-app-nav-divider" aria-hidden="true">|</span>
-            <span class="mgmt-app-nav-external">
-                ${externalNavRow(current === "none" ? "" : current)}
-            </span>
-        </nav>
     </div>
 </header>`;
     }

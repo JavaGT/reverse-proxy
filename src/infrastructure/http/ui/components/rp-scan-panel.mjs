@@ -5,13 +5,14 @@ export class RpScanPanel extends HTMLElement {
     connectedCallback() {
         this.innerHTML = `
             <rp-panel-toolbar heading="Port scanner"></rp-panel-toolbar>
+            <p class="mgmt-p mgmt-muted">Looks for listening TCP ports in a range on <strong>this</strong> host. Narrow ranges finish faster; use results with <strong>Add route</strong> when you wire a hostname to a port.</p>
             <form id="scan-form" class="mgmt-scan-row">
                 <input type="number" id="sc-start" class="mgmt-scan-input" value="3000" min="1" max="65535" required aria-label="Start port">
                 <span class="mgmt-scan-sep" aria-hidden="true">–</span>
                 <input type="number" id="sc-end" class="mgmt-scan-input" value="4000" min="1" max="65535" required aria-label="End port">
-                <button type="submit" class="mgmt-btn mgmt-btn-primary">Scan</button>
+                <button type="submit" class="mgmt-btn mgmt-btn-primary">Scan ports</button>
             </form>
-            <p class="mgmt-note" id="scan-status"></p>
+            <p class="mgmt-note" id="scan-status" aria-live="polite" role="status"></p>
             <div id="scan-out"></div>`;
 
         this.querySelector("#scan-form")?.addEventListener("submit", e => this.#run(e));
@@ -23,16 +24,17 @@ export class RpScanPanel extends HTMLElement {
         const end = parseInt(this.querySelector("#sc-end")?.value, 10);
         const st = this.querySelector("#scan-status");
         const out = this.querySelector("#scan-out");
-        st.textContent = "Scanning…";
+        st.textContent = "Scanning ports…";
         out.innerHTML = "";
         try {
             const { data } = await apiFetch("/api/v1/scan", {
                 method: "POST",
                 body: JSON.stringify({ start, end })
             });
-            st.textContent = `Found ${data.openPorts.length} open port(s).`;
+            st.textContent = `Found ${data.openPorts.length} open port${data.openPorts.length === 1 ? "" : "s"}.`;
             if (!data.openPorts.length) {
-                out.innerHTML = "<p class=\"mgmt-p\">None.</p>";
+                out.innerHTML =
+                    "<p class=\"mgmt-p\">No open ports in this range. Try different start and end values, then run <strong>Scan ports</strong> again.</p>";
                 return;
             }
             const rows = data.openPorts
@@ -42,10 +44,10 @@ export class RpScanPanel extends HTMLElement {
                             String(process.pid)
                         )}</td>
                         <td class="mgmt-action-cell">
-                            <button type="button" class="mgmt-btn sc-proxy" data-port="${port}" title="Reserve this port as a route">Edit</button>
+                            <button type="button" class="mgmt-btn sc-proxy" data-port="${port}" title="Open add-route flow for this port">Add route</button>
                         </td>
                         <td class="mgmt-action-cell">
-                            <button type="button" class="mgmt-btn sc-kill" data-port="${port}" title="Terminate process on this port">Delete</button>
+                            <button type="button" class="mgmt-btn sc-kill" data-port="${port}" title="Terminate process listening on this port">Stop process</button>
                         </td></tr>`
                 )
                 .join("");
@@ -59,8 +61,8 @@ export class RpScanPanel extends HTMLElement {
                                 <th colspan="2" class="mgmt-th-actions">Actions</th>
                             </tr>
                             <tr>
-                                <th class="mgmt-th-sub">Edit</th>
-                                <th class="mgmt-th-sub">Delete</th>
+                                <th class="mgmt-th-sub">Route</th>
+                                <th class="mgmt-th-sub">Stop</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>

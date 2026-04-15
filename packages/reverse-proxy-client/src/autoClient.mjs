@@ -182,8 +182,9 @@ export function createAutoClient(options) {
             return execHttpOrDb(() => http.deleteDdns(), () => db.deleteDdns());
         },
 
-        async postDdnsSync() {
-            return execHttpOnly("postDdnsSync", () => http.postDdnsSync());
+        /** @param {string} [jobId] */
+        async postDdnsSync(jobId) {
+            return execHttpOnly("postDdnsSync", () => http.postDdnsSync(jobId));
         },
 
         async getNetwork() {

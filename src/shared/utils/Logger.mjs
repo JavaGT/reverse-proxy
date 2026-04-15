@@ -1,13 +1,14 @@
 import pino from "pino";
 
-const isDev = process.env.NODE_ENV !== "production";
+/** Logging style is fixed (configuration is via SQLite / management Settings, not process environment). */
+const isDev = true;
 
 /**
  * SRP: Centralized structured logging configuration.
  * Uses pino for high-performance JSON logging.
  */
 export const logger = pino({
-    level: process.env.LOG_LEVEL || "info",
+    level: "info",
     transport: isDev ? {
         target: "pino-pretty",
         options: {

@@ -1,4 +1,10 @@
 import { normalizeReserveOptions } from "../shared/utils/ReserveOptions.mjs";
+import {
+    BaseDomainNotConfiguredError,
+    BaseDomainRequiredError,
+    PortValidationError,
+    SubdomainValidationError
+} from "./routeErrors.mjs";
 
 /**
  * SRP: Pure in-memory route registry with Load Balancing support.
@@ -330,14 +336,12 @@ export class RouteRegistry {
     /** Apex must always be explicit (no implicit primary). */
     #resolveBaseDomain(requested) {
         if (requested == null || String(requested).trim() === "") {
-            throw new Error("baseDomain is required");
+            throw new BaseDomainRequiredError();
         }
 
         const d = String(requested).trim().toLowerCase();
         if (!this.#rootDomains.has(d)) {
-            throw new Error(
-                `baseDomain "${requested}" is not configured; allowed: ${Array.from(this.#rootDomains).sort().join(", ")}`
-            );
+            throw new BaseDomainNotConfiguredError(requested, this.getRootDomains());
         }
         return d;
     }
@@ -376,7 +380,7 @@ export class RouteRegistry {
         const normalized = String(subdomain ?? "").trim().toLowerCase();
 
         if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalized)) {
-            throw new Error("subdomain must be a single DNS label using letters, numbers, or hyphens");
+            throw new SubdomainValidationError();
         }
 
         return normalized;
@@ -386,7 +390,7 @@ export class RouteRegistry {
         const normalized = Number(port);
 
         if (!Number.isInteger(normalized) || normalized < 1 || normalized > 65535) {
-            throw new Error("port must be an integer between 1 and 65535");
+            throw new PortValidationError();
         }
 
         return normalized;

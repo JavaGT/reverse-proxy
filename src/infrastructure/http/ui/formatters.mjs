@@ -180,20 +180,11 @@ export function formatDnsReportRow(row, serverIpSet) {
                     </tr>`;
 }
 
-let mgmtCollapsibleTableSeq = 0;
-
 /**
- * Wraps a `mgmt-table-wrap` block: default collapsed (~8em); Show/Hide toggles full table.
  * @param {string} innerHtml - e.g. `<div class="mgmt-table-wrap">…</div>`
  */
 export function wrapCollapsibleTable(innerHtml) {
-    const id = `mgmt-coll-tbl-${++mgmtCollapsibleTableSeq}`;
-    return `<div class="mgmt-table-collapsible mgmt-table-collapsed">
-        <div class="mgmt-table-collapsible-bar">
-            <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="${id}">Show table</button>
-        </div>
-        <div class="mgmt-table-collapsible-body" id="${id}">${innerHtml}</div>
-    </div>`;
+    return innerHtml;
 }
 
 export function escapeHtml(s) {

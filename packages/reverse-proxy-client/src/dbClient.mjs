@@ -1,3 +1,8 @@
+import {
+    mergeServerSettingsSparseWithDefaults,
+    mergedServerSettingsToEnvRecord,
+    overlayEnvBootstrapForOmittedSqliteKeys
+} from "../../../src/config/serverSettingsRegistry.mjs";
 import { SqlitePersistence } from "../../../src/infrastructure/persistence/SqlitePersistence.mjs";
 import { hydrateRegistryFromPersistence } from "../../../src/management/bootstrapFromPersistence.mjs";
 import { normalizeReserveOptions, ReserveValidationError } from "../../../src/shared/utils/ReserveOptions.mjs";
@@ -10,6 +15,7 @@ import {
 import { listDnsConsoleProviderIds } from "../../../src/infrastructure/dns/console/DnsConsoleRegistry.mjs";
 import { buildDdnsPublicSummary, mergePutDdnsBody } from "../../../src/ddns/ddnsConfigResolve.mjs";
 import { SqliteIpCache } from "../../../src/ddns/infrastructure/adapters/SqliteIpCache.mjs";
+import { LEGACY_V1_JOB_ID } from "../../../src/ddns/ddnsDocument.mjs";
 import { ManagementApiError } from "./errors.mjs";
 
 /** @param {Record<string, unknown>} body */
@@ -20,6 +26,38 @@ function parseReservationTargets(body) {
         else if (body.port !== undefined && body.port !== null) reservationTargets = [body.port];
     }
     return reservationTargets;
+}
+
+/**
+ * @param {{ getDatabaseSync?: () => import("node:sqlite").DatabaseSync, getDdnsLastRun?: () => unknown }} persistence
+ * @param {{ jobs?: Array<{ id?: string }> }} summary
+ */
+async function attachDdnsIpCacheAndLastRun(persistence, summary) {
+    let cachedPublicIp = null;
+    /** @type {Record<string, unknown>} */
+    const cachedPublicIpByJob = {};
+    if (typeof persistence.getDatabaseSync === "function") {
+        try {
+            const db = persistence.getDatabaseSync();
+            const jobList = Array.isArray(summary.jobs) ? summary.jobs : [];
+            for (const j of jobList) {
+                if (!j?.id) continue;
+                const cache = new SqliteIpCache(db, j.id);
+                const ip = await cache.read();
+                cachedPublicIpByJob[j.id] = ip ? ip.toJSON() : null;
+            }
+            cachedPublicIp =
+                cachedPublicIpByJob[LEGACY_V1_JOB_ID] ??
+                (jobList[0]?.id ? cachedPublicIpByJob[jobList[0].id] : null) ??
+                null;
+        } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            console.error(`[@javagt/reverse-proxy-client] DDNS cached IP read failed (non-fatal): ${detail}`);
+        }
+    }
+    const lastRun =
+        typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
+    return { cachedPublicIp, cachedPublicIpByJob, lastRun };
 }
 
 /**
@@ -35,7 +73,13 @@ function parseReservationTargets(body) {
  */
 export function createDbClient(options) {
     const persistence = new SqlitePersistence(options.dbPath);
-    const env = options.env ?? process.env;
+    const getEffectiveEnv = () => {
+        if (options.env) return options.env;
+        const sparse = persistence.getServerSettings();
+        const merged = mergeServerSettingsSparseWithDefaults(sparse);
+        overlayEnvBootstrapForOmittedSqliteKeys(sparse, merged);
+        return mergedServerSettingsToEnvRecord(merged);
+    };
     const publicUrlHttpsPrefix = options.publicUrlHttpsPrefix ?? "https";
     const publicUrlHttpPrefix = options.publicUrlHttpPrefix ?? "http";
     const defaultRootDomains = options.defaultRootDomains ?? "javagrant.ac.nz";
@@ -45,12 +89,24 @@ export function createDbClient(options) {
 
     async function ensure() {
         if (!registry) {
-            const { registry: r } = await hydrateRegistryFromPersistence(persistence, env, {
+            const { registry: r } = await hydrateRegistryFromPersistence(persistence, getEffectiveEnv(), {
                 defaultRootDomains,
                 logger: {}
             });
             registry = r;
         }
+    }
+
+    /** @param {object | null | undefined} stored */
+    function ddnsPublicSummary(stored) {
+        return buildDdnsPublicSummary({
+            getApexDomains: () => registry.getRootDomains(),
+            stored: stored ?? null,
+            getDnsConsoleContext: () => ({
+                dnsConsole: persistence.getRootDomainConfig?.()?.dnsConsole ?? null,
+                env: getEffectiveEnv()
+            })
+        });
     }
 
     /** @param {string} host */
@@ -395,24 +451,9 @@ export function createDbClient(options) {
                 throw new ManagementApiError(501, "NOT_IMPLEMENTED", "DDNS settings require SQLite persistence", null, null);
             }
             await ensure();
-            const stored = persistence.getDdnsSettings();
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => registry.getRootDomains(),
-                stored
-            });
-            let cachedPublicIp = null;
-            if (typeof persistence.getDatabaseSync === "function") {
-                try {
-                    const cache = new SqliteIpCache(persistence.getDatabaseSync());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch {
-                    /* ignore */
-                }
-            }
-            const lastRun =
-                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
-            return { data: { ...summary, cachedPublicIp, lastRun } };
+            const summary = ddnsPublicSummary(persistence.getDdnsSettings());
+            const extras = await attachDdnsIpCacheAndLastRun(persistence, summary);
+            return { data: { ...summary, ...extras } };
         },
 
         /** @param {Record<string, unknown>} body */
@@ -430,24 +471,9 @@ export function createDbClient(options) {
                 throw new ManagementApiError(400, "INVALID_REQUEST", merged.message, null, null);
             }
             persistence.saveDdnsSettings(merged.value);
-            const stored = persistence.getDdnsSettings();
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => registry.getRootDomains(),
-                stored
-            });
-            let cachedPublicIp = null;
-            if (typeof persistence.getDatabaseSync === "function") {
-                try {
-                    const cache = new SqliteIpCache(persistence.getDatabaseSync());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch {
-                    /* ignore */
-                }
-            }
-            const lastRun =
-                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
-            return { data: { ...summary, cachedPublicIp, lastRun } };
+            const summary = ddnsPublicSummary(persistence.getDdnsSettings());
+            const extras = await attachDdnsIpCacheAndLastRun(persistence, summary);
+            return { data: { ...summary, ...extras } };
         },
 
         async deleteDdns() {
@@ -456,23 +482,9 @@ export function createDbClient(options) {
             }
             await ensure();
             persistence.clearDdnsSettings();
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => registry.getRootDomains(),
-                stored: null
-            });
-            let cachedPublicIp = null;
-            if (typeof persistence.getDatabaseSync === "function") {
-                try {
-                    const cache = new SqliteIpCache(persistence.getDatabaseSync());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch {
-                    /* ignore */
-                }
-            }
-            const lastRun =
-                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
-            return { data: { ...summary, cachedPublicIp, lastRun } };
+            const summary = ddnsPublicSummary(null);
+            const extras = await attachDdnsIpCacheAndLastRun(persistence, summary);
+            return { data: { ...summary, ...extras } };
         }
     };
 }

@@ -6,40 +6,52 @@
     <title>Reverse proxy — management</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <rp-mgmt-header tagline="Management · 127.0.0.1" brand-href="#overview" section-links="hash" tools="signout,theme,help,refresh" current="none"></rp-mgmt-header>
+    <rp-mgmt-header tagline="Management · 127.0.0.1" brand-href="#overview" tools="signout,theme,help,refresh"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
             <section class="mgmt-help-section">
                 <h3 class="mgmt-help-h">Network → local addresses</h3>
                 <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
-                <div class="mgmt-table-collapsible mgmt-table-collapsed">
-                    <div class="mgmt-table-collapsible-bar">
-                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-help">Show table</button>
-                    </div>
-                    <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-help">
-                        <div class="mgmt-table-wrap mgmt-help-table-wrap">
-                            <table class="mgmt-table mgmt-help-table">
-                                <thead>
-                                    <tr><th>Column</th><th>Meaning</th></tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
-                                    <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
-                                    <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
-                                    <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div class="mgmt-table-wrap mgmt-help-table-wrap">
+                    <table class="mgmt-table mgmt-help-table">
+                        <thead>
+                            <tr><th>Column</th><th>Meaning</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
+                            <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
+                            <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
+                            <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
             <section class="mgmt-help-section">
@@ -57,8 +69,16 @@
         </div>
     </rp-mgmt-modal>
 
-    <main id="main-content" class="mgmt-page">
-        <section id="overview" class="mgmt-section">
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="dashboard"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="Getting started">
+                    <p class="mgmt-p">This screen shows what the reverse proxy is doing on <strong>this</strong> host: hostnames, backends, and quick health checks. Use the sidebar to switch sections; only one panel shows at a time.</p>
+                    <p class="mgmt-p mgmt-muted">Use <strong>Help</strong> in the toolbar for column meanings and badges inside each panel.</p>
+                </div>
+                <div class="mgmt-shell-panels">
+        <section id="overview" class="mgmt-section mgmt-dashboard-panel">
             <h2>Overview</h2>
             <p class="mgmt-p">
                 Manage routes, apex domains, network status, and port scans for this host. Use <button type="button" class="mgmt-inline-help" id="open-help-inline">Help</button> for column meanings.
@@ -71,35 +91,30 @@
             </details>
         </section>
 
-        <section id="routes" class="mgmt-section">
+        <section id="routes" class="mgmt-section mgmt-dashboard-panel" hidden>
             <rp-routes-panel id="routes-panel"></rp-routes-panel>
             <rp-reserve-form></rp-reserve-form>
         </section>
 
-        <section id="domains" class="mgmt-section">
+        <section id="domains" class="mgmt-section mgmt-dashboard-panel" hidden>
             <rp-apex-domains-panel></rp-apex-domains-panel>
         </section>
 
-        <section id="network" class="mgmt-section">
+        <section id="network" class="mgmt-section mgmt-dashboard-panel" hidden>
             <rp-network-panel></rp-network-panel>
         </section>
 
-        <section id="scanner" class="mgmt-section">
+        <section id="scanner" class="mgmt-section mgmt-dashboard-panel" hidden>
             <rp-scan-panel></rp-scan-panel>
         </section>
 
-        <section id="api" class="mgmt-section">
+        <section id="api" class="mgmt-section mgmt-dashboard-panel" hidden>
             <h2>API</h2>
             <p class="mgmt-p">OpenAPI: <a href="/api/v1/openapi.yaml"><code>GET /api/v1/openapi.yaml</code></a> · Human-oriented notes: <a href="/llms.txt"><code>GET /llms.txt</code></a>. Errors include <code>error.resolution</code> hints.</p>
             <details class="mgmt-details">
                 <summary>Node client and endpoint list</summary>
                 <div class="mgmt-details-body">
                     <p class="mgmt-p mgmt-note" style="margin-top:0">Install <a href="https://www.npmjs.com/package/@javagt/reverse-proxy-client" rel="noopener noreferrer"><code>@javagt/reverse-proxy-client</code></a> for <code>createHttpClient</code>, optional SQLite access, and the <code>reverse-proxy-mgmt</code> CLI (see <code>llms.txt</code>).</p>
-            <div class="mgmt-table-collapsible mgmt-table-collapsed">
-                <div class="mgmt-table-collapsible-bar">
-                    <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-api">Show table</button>
-                </div>
-                <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-api">
                     <div class="mgmt-table-wrap">
                         <table class="mgmt-table">
                             <thead>
@@ -120,16 +135,17 @@
                                 <tr><td><code>DELETE /api/v1/process/:port</code></td><td>Stop process listening on TCP port (localhost binding; remote clients need a session)</td></tr>
                                 <tr><td><code>GET /api/v1/accounts</code></td><td>List management users (see <a href="accounts.html">Accounts</a>)</td></tr>
                                 <tr><td><code>DELETE /api/v1/accounts/:userId</code></td><td>Remove a user (not yourself; not the last account)</td></tr>
-                                <tr><td><code>GET /api/v1/settings</code></td><td>Effective server settings (SQLite + <code>.env</code>); see <a href="settings.html">Settings</a></td></tr>
+                                <tr><td><code>GET /api/v1/settings</code></td><td>Effective server settings (SQLite + defaults); see <a href="settings.html">Settings</a></td></tr>
                                 <tr><td><code>PUT /api/v1/settings</code></td><td>Update settings in SQLite (localhost TCP + session); restart may be required</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div>
-                </div>
             </details>
         </section>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>

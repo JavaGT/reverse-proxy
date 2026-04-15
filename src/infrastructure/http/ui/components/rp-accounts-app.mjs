@@ -8,7 +8,7 @@ import { apiFetch, apiFetchResult, messageFromErrorBody } from "../api-client.mj
 const ACCOUNTS_MARKUP = `
 <header class="mgmt-masthead">
     <h1>Accounts</h1>
-    <p class="mgmt-sub">Registration invite secret and express-easy-auth users for this management server.</p>
+    <p class="mgmt-sub">Invite secrets, users, passkeys, and two-factor authentication for this management server.</p>
 </header>
 <section class="mgmt-section" aria-labelledby="invite-heading">
     <h2 id="invite-heading">Registration invite</h2>
@@ -47,7 +47,7 @@ const ACCOUNTS_MARKUP = `
                 <p id="twofa-secret-line" class="mgmt-p mgmt-mono" hidden></p>
                 <div class="mgmt-login-field">
                     <label class="mgmt-label" for="twofa-verify-code">6-digit code</label>
-                    <input id="twofa-verify-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="000000" />
+                    <input id="twofa-verify-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="000000…" spellcheck="false" />
                 </div>
                 <div class="mgmt-login-actions">
                     <button type="button" class="mgmt-btn mgmt-btn-primary" id="twofa-verify-submit">Enable 2FA</button>
@@ -66,7 +66,7 @@ const ACCOUNTS_MARKUP = `
                 </div>
                 <div class="mgmt-login-field">
                     <label class="mgmt-label" for="twofa-reauth-totp">2FA code</label>
-                    <input id="twofa-reauth-totp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="If required" />
+                    <input id="twofa-reauth-totp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="If required…" spellcheck="false" />
                 </div>
                 <div class="mgmt-login-actions">
                     <button type="button" class="mgmt-btn mgmt-btn-primary" id="twofa-reauth-submit">Confirm and turn off 2FA</button>

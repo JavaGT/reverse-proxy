@@ -6,15 +6,34 @@
     <title>Accounts · Reverse proxy</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <rp-mgmt-header tagline="Accounts · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh" current="accounts"></rp-mgmt-header>
+    <rp-mgmt-header tagline="Accounts · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
@@ -30,8 +49,17 @@
         </div>
     </rp-mgmt-modal>
 
-    <main id="main-content" class="mgmt-page">
-        <rp-accounts-app></rp-accounts-app>
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="pages" current="accounts"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="About accounts">
+                    <p class="mgmt-p">Decide who may use the management API and UI from <strong>non-loopback</strong> addresses: invite secrets, passkeys, two-factor authentication, and the user list.</p>
+                    <p class="mgmt-p mgmt-muted">Same-machine access often skips sign-in; remote use needs a session after you sign in or register.</p>
+                </div>
+                <rp-accounts-app></rp-accounts-app>
+            </div>
+        </div>
     </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>

@@ -25,7 +25,7 @@ export class RpNetworkPanel extends HTMLElement {
     async render(options = {}) {
         const silent = options.silent === true;
         if (!silent) {
-            this.innerHTML = "<p class=\"mgmt-p mgmt-note\">Loading network &amp; DNS…</p>";
+            this.innerHTML = "<p class=\"mgmt-p mgmt-note\" aria-live=\"polite\">Loading network &amp; DNS…</p>";
         }
         try {
             const { data } = await apiFetch("/api/v1/network");
@@ -46,7 +46,7 @@ export class RpNetworkPanel extends HTMLElement {
             const dnsSections = groupDnsRowsForSections(dnsRowsList);
             const dnsRows =
                 dnsSections.length === 0
-                    ? '<tr><td colspan="7">No apex domains in this snapshot.</td></tr>'
+                    ? '<tr><td colspan="7" class="mgmt-table-empty">No apex domains are configured yet. Add apexes on the <strong>Domains</strong> section (or bootstrap via settings), then refresh this page.</td></tr>'
                     : dnsSections
                           .map(
                               sec =>
@@ -95,6 +95,7 @@ export class RpNetworkPanel extends HTMLElement {
             this.innerHTML = `
                 <rp-panel-toolbar heading="Network &amp; DNS"></rp-panel-toolbar>
                 <p class="mgmt-p mgmt-note">Public IP, local interfaces, and DNS (apex + catch-all probes). Route hostnames stay under Routes. <button type="button" class="mgmt-inline-help" data-open-help>Help</button></p>
+                <p class="mgmt-p mgmt-muted">Use this when you want to see whether DNS for your apexes lines up with the public IP this host reports, and how local interfaces compare.</p>
                 ${gen}
                 <h3 class="mgmt-h3">Public IP (Internet)</h3>
                 ${wrapCollapsibleTable(`<div class="mgmt-table-wrap">

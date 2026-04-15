@@ -19,7 +19,7 @@ export class RpAuthRegister extends HTMLElement {
         <form id="form-reg" autocomplete="on">
             <div class="mgmt-login-field">
                 <label class="mgmt-label" for="user">Username</label>
-                <input id="user" name="username" type="text" autocomplete="username" required>
+                <input id="user" name="username" type="text" autocomplete="username" spellcheck="false" required>
             </div>
             <div class="mgmt-login-field">
                 <label class="mgmt-label" for="email">Email</label>
@@ -37,7 +37,7 @@ export class RpAuthRegister extends HTMLElement {
                 <button type="submit" class="mgmt-btn mgmt-btn-primary" id="btn-reg">Create account</button>
             </div>
         </form>
-        <p id="msg" class="mgmt-login-msg" role="alert"></p>
+        <p id="msg" class="mgmt-login-msg" role="alert" aria-live="assertive"></p>
         <p class="mgmt-p mgmt-note"><a href="/login.html">Back to sign in</a></p>
         <p class="mgmt-p mgmt-note mgmt-login-footnote">Access from this machine (loopback or this host&rsquo;s IP behind a local reverse proxy) does not require sign-in. Use SSH port forwarding if you use the management URL from another device.</p>
     </section>

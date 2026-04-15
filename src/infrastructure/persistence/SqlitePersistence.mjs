@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { LEGACY_V1_JOB_ID } from "../../ddns/ddnsDocument.mjs";
 
 /**
  * SRP: SQLite-backed route persistence (node:sqlite).
@@ -83,11 +84,43 @@ export class SqlitePersistence {
     clearDdnsSettings() {
         this.#db.prepare(`DELETE FROM meta WHERE key = 'ddns'`).run();
         this.#db.prepare(`DELETE FROM meta WHERE key = 'ddns_last_run'`).run();
+        this.#db.prepare(`DELETE FROM meta WHERE key LIKE 'ddns_public_ip%'`).run();
     }
 
     /**
-     * Last DDNS sync telemetry (`meta.ddns_last_run`), separate from secrets in `meta.ddns`.
-     * @returns {{ at: string, outcome: string, detail: string, skippedBecause: string | null } | null}
+     * Public IPv4/6 last written by DDNS sync (`meta.ddns_public_ip*`). Used for management
+     * same-machine detection when hairpin presents this WAN but outbound ipify differs or lags.
+     * @returns {string[]}
+     */
+    getDdnsPublicIpAddressesForLocalOperatorHint() {
+        const rows = this.#db
+            .prepare(`SELECT value FROM meta WHERE key = 'ddns_public_ip' OR key LIKE 'ddns_public_ip:%'`)
+            .all();
+        const out = [];
+        const seen = new Set();
+        for (const row of rows) {
+            if (!row?.value) continue;
+            try {
+                const p = JSON.parse(row.value);
+                if (!p || typeof p !== "object") continue;
+                for (const key of ["ipv4", "ipv6"]) {
+                    const v = p[key];
+                    if (typeof v !== "string") continue;
+                    const t = v.trim();
+                    if (!t || seen.has(t)) continue;
+                    seen.add(t);
+                    out.push(t);
+                }
+            } catch {
+                /* ignore */
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Last DDNS sync telemetry (`meta.ddns_last_run`), keyed by job id.
+     * @returns {{ jobs: Record<string, { at: string, outcome: string, detail: string, skippedBecause: string | null }> } | null}
      */
     getDdnsLastRun() {
         const row = this.#db.prepare(`SELECT value FROM meta WHERE key = 'ddns_last_run'`).get();
@@ -95,6 +128,9 @@ export class SqlitePersistence {
         try {
             const parsed = JSON.parse(row.value);
             if (!parsed || typeof parsed !== "object") return null;
+            if (parsed.jobs && typeof parsed.jobs === "object" && !Array.isArray(parsed.jobs)) {
+                return { jobs: /** @type {Record<string, object>} */ (parsed.jobs) };
+            }
             const at = typeof parsed.at === "string" ? parsed.at : null;
             const outcome = typeof parsed.outcome === "string" ? parsed.outcome : null;
             const detail = typeof parsed.detail === "string" ? parsed.detail : "";
@@ -104,7 +140,11 @@ export class SqlitePersistence {
                 parsed.skippedBecause === null || parsed.skippedBecause === undefined
                     ? null
                     : String(parsed.skippedBecause);
-            return { at, outcome, detail, skippedBecause };
+            return {
+                jobs: {
+                    [LEGACY_V1_JOB_ID]: { at, outcome, detail, skippedBecause }
+                }
+            };
         } catch {
             return null;
         }
@@ -114,6 +154,14 @@ export class SqlitePersistence {
      * @param {{ at: string, outcome: string, detail: string, skippedBecause: string | null }} record
      */
     saveDdnsLastRun(record) {
+        this.saveDdnsLastRunForJob(LEGACY_V1_JOB_ID, record);
+    }
+
+    /**
+     * @param {string} jobId
+     * @param {{ at: string, outcome: string, detail: string, skippedBecause: string | null }} record
+     */
+    saveDdnsLastRunForJob(jobId, record) {
         const detail = String(record.detail ?? "").slice(0, 512);
         const payload = {
             at: record.at,
@@ -121,11 +169,15 @@ export class SqlitePersistence {
             detail,
             skippedBecause: record.skippedBecause ?? null
         };
-        this.#db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('ddns_last_run', ?)`).run(JSON.stringify(payload));
+        const cur = this.getDdnsLastRun();
+        const jobs = { ...(cur?.jobs ?? {}), [String(jobId).trim()]: payload };
+        this.#db
+            .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('ddns_last_run', ?)`)
+            .run(JSON.stringify({ jobs }));
     }
 
     /**
-     * Sparse overrides for `process.env`-backed server settings (see `src/config/serverSettingsRegistry.mjs`).
+     * Sparse overrides for server settings merged with defaults (see `src/config/serverSettingsRegistry.mjs`).
      * @returns {Record<string, unknown>}
      */
     getServerSettings() {
@@ -140,7 +192,7 @@ export class SqlitePersistence {
     }
 
     /**
-     * Merge partial settings; use `null` to remove a key (revert to `.env` on next apply).
+     * Merge partial settings; use `null` to remove a key (revert to built-in default on next apply).
      * @param {Record<string, unknown>} partial
      */
     saveServerSettingsPartial(partial) {

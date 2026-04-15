@@ -46,3 +46,20 @@ test("createHttpClient returns data envelope", async () => {
     const r = await client.health();
     assert.deepStrictEqual(r, { data: { status: "OK" } });
 });
+
+test("createHttpClient postDdnsSync adds jobId query when provided", async () => {
+    /** @type {string | undefined} */
+    let seenUrl;
+    const fetch = async (/** @type {string | URL | Request} */ input) => {
+        seenUrl = typeof input === "string" ? input : input instanceof Request ? input.url : input.href;
+        return new Response(JSON.stringify({ data: { ok: true } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+        });
+    };
+
+    const client = createHttpClient({ baseUrl: "http://127.0.0.1:9", fetch });
+    await client.postDdnsSync("job-abc");
+    assert.ok(seenUrl?.includes("/api/v1/ddns/sync?"), "path and query");
+    assert.ok(seenUrl?.includes("jobId=job-abc"), "jobId param");
+});

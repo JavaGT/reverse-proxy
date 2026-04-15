@@ -6,11 +6,11 @@ export class RpReserveForm extends HTMLElement {
 
     connectedCallback() {
         this.innerHTML = `
-            <rp-mgmt-modal id="reserve-modal" title="New reservation">
+            <rp-mgmt-modal id="reserve-modal" title="Add route">
                 <form id="reserve-form">
                     <div class="mgmt-form-row">
                         <label for="r-sub">Subdomain</label>
-                        <input type="text" id="r-sub" required pattern="[a-zA-Z0-9-]+" autocomplete="off">
+                        <input type="text" id="r-sub" required pattern="[a-zA-Z0-9-]+" autocomplete="off" spellcheck="false" placeholder="e.g. app…">
                     </div>
                     <div class="mgmt-form-row">
                         <label for="r-base">Base domain</label>
@@ -18,16 +18,16 @@ export class RpReserveForm extends HTMLElement {
                     </div>
                     <div class="mgmt-form-row">
                         <label for="r-ports">Port(s)</label>
-                        <input type="text" id="r-ports" placeholder="3000 or 3000,3001" required>
+                        <input type="text" id="r-ports" placeholder="3000 or 3000,3001…" required spellcheck="false">
                     </div>
                     <div class="mgmt-form-row">
                         <label for="r-health">Health path</label>
-                        <input type="text" id="r-health" placeholder="optional, e.g. /health">
+                        <input type="text" id="r-health" placeholder="Optional, e.g. /health…" spellcheck="false">
                     </div>
                 </form>
                 <div slot="footer">
                     <button type="button" class="mgmt-btn" id="reserve-cancel">Cancel</button>
-                    <button type="submit" class="mgmt-btn mgmt-btn-primary" form="reserve-form">Reserve</button>
+                    <button type="submit" class="mgmt-btn mgmt-btn-primary" form="reserve-form">Save route</button>
                 </div>
             </rp-mgmt-modal>`;
 
@@ -54,14 +54,14 @@ export class RpReserveForm extends HTMLElement {
                         portIn.value = Array.isArray(d.ports) ? d.ports.join(",") : String(d.ports);
                     }
                     health.value = d.healthPath ?? "";
-                    modal?.setAttribute("title", "Edit reservation");
+                    modal?.setAttribute("title", "Edit route");
                 } else if (isScanOnly) {
                     form?.reset();
                     portIn.value = String(d.port);
-                    modal?.setAttribute("title", "New reservation");
+                    modal?.setAttribute("title", "Add route");
                 } else {
                     form?.reset();
-                    modal?.setAttribute("title", "New reservation");
+                    modal?.setAttribute("title", "Add route");
                 }
 
                 if (d.baseDomain != null && base) base.value = d.baseDomain;

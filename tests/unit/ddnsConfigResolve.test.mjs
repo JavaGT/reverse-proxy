@@ -6,7 +6,9 @@ import {
     DEFAULT_PORKBUN_API_BASE_URL,
     getRuntimeDdnsTick,
     mergePutDdnsBody,
-    parseStoredDdnsRow
+    parseStoredDdnsRow,
+    resolveDomainsForJob,
+    snapshotDdnsResolveContext
 } from "../../src/ddns/ddnsConfigResolve.mjs";
 
 function isValidApexFQDN(s) {
@@ -59,6 +61,26 @@ test("buildDdnsPublicSummary: no row is none / not_configured", () => {
     assert.deepStrictEqual(s.ipv4Services, [...DEFAULT_IPV4_SERVICES]);
 });
 
+test("snapshotDdnsResolveContext calls source getters once; jobs reuse snapshot", () => {
+    let apexCalls = 0;
+    let ctxCalls = 0;
+    const snap = snapshotDdnsResolveContext(
+        () => {
+            apexCalls++;
+            return ["a.example.com", "b.example.com"];
+        },
+        () => {
+            ctxCalls++;
+            return { dnsConsole: null, env: {} };
+        }
+    );
+    const job = { domainMode: "apex", provider: "porkbun", domains: [] };
+    resolveDomainsForJob(job, snap.getApexDomains, snap.getDnsConsoleContext);
+    resolveDomainsForJob(job, snap.getApexDomains, snap.getDnsConsoleContext);
+    assert.strictEqual(apexCalls, 1);
+    assert.strictEqual(ctxCalls, 1);
+});
+
 test("getRuntimeDdnsTick: no SQLite row", () => {
     const tick = getRuntimeDdnsTick({
         persistence: { getDdnsSettings: () => null },
@@ -66,6 +88,32 @@ test("getRuntimeDdnsTick: no SQLite row", () => {
     });
     assert.strictEqual(tick.shouldRun, false);
     assert.strictEqual(tick.logReason, "ddns_not_configured");
+});
+
+test("getRuntimeDdnsTick apex mode filters to Porkbun DNS console apexes only", () => {
+    const stored = {
+        enabled: true,
+        porkbunApiKey: "k",
+        porkbunSecretKey: "s",
+        domainMode: "apex",
+        domains: [],
+        matchNote: "m",
+        intervalMs: 30_000,
+        ipLookupTimeoutMs: 8000,
+        ipv4Services: ["https://v4.ident.me"],
+        ipv6Services: ["https://v6.ident.me"],
+        porkbunApiBaseUrl: DEFAULT_PORKBUN_API_BASE_URL
+    };
+    const tick = getRuntimeDdnsTick({
+        persistence: { getDdnsSettings: () => stored },
+        getApexDomains: () => ["a.example", "b.example"],
+        getDnsConsoleContext: () => ({
+            dnsConsole: { defaultProvider: "porkbun", byApex: { "a.example": "none" } },
+            env: {}
+        })
+    });
+    assert.strictEqual(tick.shouldRun, true);
+    assert.deepStrictEqual(tick.domains, ["b.example"]);
 });
 
 test("getRuntimeDdnsTick uses SQLite credentials and service lists", () => {
@@ -110,9 +158,11 @@ test("mergePutDdnsBody keeps keys when omitted on update", () => {
     };
     const m = mergePutDdnsBody(prev, { enabled: false }, isValidApexFQDN);
     assert.strictEqual(m.ok, true);
-    assert.strictEqual(m.value.enabled, false);
-    assert.strictEqual(m.value.porkbunApiKey, "old-k");
-    assert.strictEqual(m.value.porkbunSecretKey, "old-s");
+    assert.strictEqual(m.value.version, 2);
+    const j0 = m.value.jobs[0];
+    assert.strictEqual(j0.enabled, false);
+    assert.strictEqual(j0.credentials.porkbunApiKey, "old-k");
+    assert.strictEqual(j0.credentials.porkbunSecretKey, "old-s");
 });
 
 test("parseStoredDdnsRow rejects explicit mode with empty domains", () => {

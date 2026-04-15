@@ -1,6 +1,7 @@
+import "./src/config/bootstrapEnv.mjs";
 import http from "node:http";
 import https from "node:https";
-import "./src/config/applyServerSettingsToEnv.mjs";
+import { DEFAULT_SQLITE_DB_PATH } from "./src/config/applyServerSettingsToEnv.mjs";
 import { ProxyService } from "./src/infrastructure/http/ProxyService.mjs";
 import { ManagementController } from "./src/api/ManagementController.mjs";
 import { ManagementServer } from "./src/infrastructure/http/ManagementServer.mjs";
@@ -10,9 +11,16 @@ import { HealthCheckService } from "./src/infrastructure/http/HealthCheckService
 import { startDdnsScheduler } from "./src/ddns/infrastructure/DdnsScheduler.mjs";
 import { logger } from "./src/shared/utils/Logger.mjs";
 import { hydrateRegistryFromPersistence } from "./src/management/bootstrapFromPersistence.mjs";
+import {
+    isDataPlaneTlsPeerSameHost,
+    MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER,
+    refreshManagementPublicEgressCache,
+    setPersistedDdnsPublicIpsForLocalOperator
+} from "./src/shared/utils/RequestUtils.mjs";
 
-const TLS_CERT_DIR = process.env.TLS_CERT_DIR;
-const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || "./reverse-proxy.db";
+/** From `.env` + SQLite `server_settings` (see `applyServerSettingsToEnv.mjs`). May be empty; management UI still starts. */
+const TLS_CERT_DIR = (process.env.TLS_CERT_DIR ?? "").trim();
+const SQLITE_DB_PATH = DEFAULT_SQLITE_DB_PATH;
 const MANAGEMENT_SUBDOMAIN = process.env.MANAGEMENT_SUBDOMAIN || "reverse-proxy";
 const MANAGEMENT_BASE_DOMAIN = process.env.MANAGEMENT_BASE_DOMAIN || null;
 const MANAGEMENT_INTERFACE_PORT = parseManagementInterfacePort(process.env.MANAGEMENT_INTERFACE_PORT);
@@ -20,17 +28,16 @@ const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS |
 const PUBLIC_URL_HTTPS_PREFIX = process.env.PUBLIC_URL_HTTPS_PREFIX || "https";
 const PUBLIC_URL_HTTP_PREFIX = process.env.PUBLIC_URL_HTTP_PREFIX || "http";
 
-if (!TLS_CERT_DIR) {
-    logger.error("TLS_CERT_DIR must be specified in .env");
-    process.exit(1);
-}
-
 const persistence = new SqlitePersistence(SQLITE_DB_PATH);
 
-const buildExtraHeaders = req => ({
-    "x-forwarded-for": req.socket.remoteAddress,
-    "x-forwarded-proto": "https"
-});
+const buildExtraHeaders = req => {
+    const peer = req.socket?.remoteAddress;
+    return {
+        "x-forwarded-for": peer,
+        "x-forwarded-proto": "https",
+        [MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER]: isDataPlaneTlsPeerSameHost(peer) ? "1" : "0"
+    };
+};
 
 /** @type {() => void} */
 let stopDdns = () => {};
@@ -55,14 +62,49 @@ async function main() {
             }
         });
 
+        /** When false, ports 80/443 and route proxying are off; loopback management UI/API still runs. */
+        const dataPlaneState = { active: false };
+        let tlsService = null;
+
+        if (TLS_CERT_DIR) {
+            tlsService = new TlsService(TLS_CERT_DIR, logger);
+            try {
+                await tlsService.start();
+                dataPlaneState.active = true;
+            } catch (err) {
+                logger.error(
+                    {
+                        err: err?.message,
+                        path: TLS_CERT_DIR,
+                        event: "tls_start_failed"
+                    },
+                    "TLS did not load (missing or invalid cert files). Management UI stays up; fix tlsCertDir / TLS_CERT_DIR and restart."
+                );
+                tlsService = null;
+                dataPlaneState.active = false;
+            }
+        } else {
+            logger.warn(
+                { event: "tls_cert_dir_unset" },
+                "TLS_CERT_DIR is empty: HTTPS proxy and port 80 redirect are disabled. Set tlsCertDir in Settings (SQLite) or TLS_CERT_DIR, then restart."
+            );
+        }
+
         let managementServer;
         const controller = new ManagementController(registry, persistence, logger, {
             publicUrlHttpsPrefix: PUBLIC_URL_HTTPS_PREFIX,
             publicUrlHttpPrefix: PUBLIC_URL_HTTP_PREFIX,
-            onRootDomainsUpdated: () => managementServer?.refreshManagementRoute()
+            onRootDomainsUpdated: () => managementServer?.refreshManagementRoute(),
+            isDataPlaneActive: () => dataPlaneState.active
         });
 
-        const tlsService = new TlsService(TLS_CERT_DIR, logger);
+        let proxyService = null;
+        let healthCheckService = null;
+        if (dataPlaneState.active && tlsService) {
+            proxyService = new ProxyService(registry, buildExtraHeaders, logger);
+            healthCheckService = new HealthCheckService(registry, logger, HEALTH_CHECK_INTERVAL_MS);
+        }
+
         managementServer = new ManagementServer(
             MANAGEMENT_SUBDOMAIN,
             () => (MANAGEMENT_BASE_DOMAIN && String(MANAGEMENT_BASE_DOMAIN).trim()) || registry.rootDomain,
@@ -72,38 +114,81 @@ async function main() {
             { sqliteDbPath: SQLITE_DB_PATH }
         );
 
-        const proxyService = new ProxyService(registry, buildExtraHeaders, logger);
-        const healthCheckService = new HealthCheckService(registry, logger, HEALTH_CHECK_INTERVAL_MS);
+        logger.info(
+            { count: registry.getPersistentRoutes().length, dataPlaneActive: dataPlaneState.active },
+            "Route registry hydrated from SQLite"
+        );
 
-        logger.info({ count: registry.getPersistentRoutes().length }, "Route registry hydrated from SQLite");
+        if (healthCheckService) {
+            healthCheckService.start();
+        }
 
-        await tlsService.start();
-        healthCheckService.start();
         await managementServer.start();
+
+        try {
+            await refreshManagementPublicEgressCache();
+        } catch {
+            /* ignore */
+        }
+        try {
+            setPersistedDdnsPublicIpsForLocalOperator(
+                persistence.getDdnsPublicIpAddressesForLocalOperatorHint()
+            );
+        } catch {
+            /* ignore */
+        }
+        const ddnsMetaHintTimer = setInterval(() => {
+            try {
+                setPersistedDdnsPublicIpsForLocalOperator(
+                    persistence.getDdnsPublicIpAddressesForLocalOperatorHint()
+                );
+            } catch {
+                /* ignore */
+            }
+        }, 120_000);
+        ddnsMetaHintTimer.unref?.();
+
+        if (!dataPlaneState.active) {
+            logger.warn(
+                { event: "management_only_mode" },
+                "Management API/UI on loopback only until TLS is configured and the process is restarted."
+            );
+        }
 
         stopDdns = startDdnsScheduler({
             persistence,
             logger,
-            getApexDomains: () => registry.getRootDomains()
+            getApexDomains: () => registry.getRootDomains(),
+            getDnsConsoleContext: () => ({
+                dnsConsole: persistence.getRootDomainConfig?.()?.dnsConsole ?? null,
+                env: process.env
+            })
         });
 
-        const httpServer = http.createServer((req, res) => {
-            const host = req.headers.host?.split(":")[0];
-            res.writeHead(301, { Location: `https://${host}${req.url}` });
-            res.end();
-        });
+        /** @type {import("node:http").Server | null} */
+        let httpServer = null;
+        /** @type {import("node:https").Server | null} */
+        let httpsServer = null;
 
-        const httpsServer = https.createServer(
-            { SNICallback: (domain, cb) => cb(null, tlsService.secureContext) },
-            proxyService.createHttpsHandler()
-        );
+        if (dataPlaneState.active && tlsService && proxyService) {
+            httpServer = http.createServer((req, res) => {
+                const host = req.headers.host?.split(":")[0];
+                res.writeHead(301, { Location: `https://${host}${req.url}` });
+                res.end();
+            });
 
-        httpsServer.on("upgrade", (req, socket, head) => {
-            proxyService.handleWebSocketUpgrade(req, socket, head);
-        });
+            httpsServer = https.createServer(
+                { SNICallback: (domain, cb) => cb(null, tlsService.secureContext) },
+                proxyService.createHttpsHandler()
+            );
 
-        httpServer.listen(80, () => logger.info("HTTP Redirect Server listening on port 80"));
-        httpsServer.listen(443, () => logger.info("HTTPS Proxy Server listening on port 443"));
+            httpsServer.on("upgrade", (req, socket, head) => {
+                proxyService.handleWebSocketUpgrade(req, socket, head);
+            });
+
+            httpServer.listen(80, () => logger.info("HTTP Redirect Server listening on port 80"));
+            httpsServer.listen(443, () => logger.info("HTTPS Proxy Server listening on port 443"));
+        }
 
         let shutdownInvocation = 0;
         const shutdown = async signal => {
@@ -134,21 +219,33 @@ async function main() {
 
             stopDdns();
             dbg("after_stopDdns", "E");
-            healthCheckService.stop();
-            tlsService.stop();
+            if (healthCheckService) {
+                healthCheckService.stop();
+            }
+            if (tlsService) {
+                tlsService.stop();
+            }
             dbg("after_sync_stops_before_management", "D");
 
             await managementServer.stop();
             dbg("after_management_stop", "B");
 
-            httpServer.close();
+            if (httpServer) {
+                httpServer.close();
+            }
             dbg("after_http_close_called", "C");
-            httpsServer.close(() => {
-                dbg("https_close_callback", "C", { totalMs: Date.now() - t0 });
-                logger.info("HTTPS Proxy Server closed. Exiting.");
+
+            if (httpsServer) {
+                httpsServer.close(() => {
+                    dbg("https_close_callback", "C", { totalMs: Date.now() - t0 });
+                    logger.info("HTTPS Proxy Server closed. Exiting.");
+                    process.exit(0);
+                });
+                dbg("after_https_close_called", "C");
+            } else {
+                logger.info("Exiting.");
                 process.exit(0);
-            });
-            dbg("after_https_close_called", "C");
+            }
 
             setTimeout(() => {
                 logger.error("Could not close connections in time, forceful exit.");

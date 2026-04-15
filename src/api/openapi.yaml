@@ -13,15 +13,15 @@ info:
 
     **Health checks:** When `options.healthPath` is set, the proxy GETs that path on each upstream periodically (`HEALTH_CHECK_INTERVAL_MS`) using native `fetch` (http/https). Success is HTTP status 200–399; redirects are not followed; timeout is 5 seconds. Failed probes mark that upstream unhealthy; the route stays registered. The data plane returns 503 when no healthy upstreams remain for the host. Omit `healthPath` to disable monitoring for that route. Each target in `GET /routes` may include `healthCheckedAt` (ISO 8601) after the first probe.
 
-    **Persistence:** Routes are stored in SQLite (`SQLITE_DB_PATH`). **Multi-apex:** apex list may be set in SQLite via `PUT /api/v1/domains` (overrides `ROOT_DOMAINS` env when present). Otherwise use `ROOT_DOMAINS` (comma-separated). **`baseDomain` is always required** on `POST /api/v1/reserve` (each item in a batch) and as a **query parameter** on `DELETE /api/v1/reserve/{subdomain}` so reservations are explicit. **Batch:** send `{ "reservations": [ { "subdomain", "baseDomain", "port" | "ports" | "targets" }, … ] }` to create several mappings in one request (possibly different apexes).
+    **Persistence:** Routes and meta are stored in SQLite at **`./reverse-proxy.db`** (process working directory). **Multi-apex:** apex list may be set in SQLite via `PUT /api/v1/domains` (overrides the default apex list from Settings when present). Otherwise the default apex list from **`meta.server_settings`** / built-in defaults applies (comma-separated `rootDomains`). **`baseDomain` is always required** on `POST /api/v1/reserve` (each item in a batch) and as a **query parameter** on `DELETE /api/v1/reserve/{subdomain}` so reservations are explicit. **Batch:** send `{ "reservations": [ { "subdomain", "baseDomain", "port" | "ports" | "targets" }, … ] }` to create several mappings in one request (possibly different apexes).
 
     **Official Node client:** npm package **`@javagt/reverse-proxy-client`** — `createHttpClient({ baseUrl })` for this API (same-machine or callers that reuse a session cookie), optional `createDbClient` / `createAutoClient` against the same SQLite file, CLI **`reverse-proxy-mgmt`**, and `ManagementApiError` for JSON errors. See `GET /llms.txt` and `packages/reverse-proxy-client/README.md` in the server repository.
 
-    **Account registration:** Configure **`MANAGEMENT_REGISTRATION_SECRET`** in **`GET /api/v1/settings`** / **`PUT /api/v1/settings`** (SQLite `meta.server_settings`) or in `.env`. `POST /api/v1/auth/register` requires JSON field **`registrationSecret`** matching that value. **`GET /api/v1/registration-secret`** returns the secret when configured. The **Accounts** page (**`/accounts.html`**) lists users and shows the invite secret (masked) with copy. **`GET /api/v1/accounts`** lists accounts; **`DELETE /api/v1/accounts/{userId}`** removes a user (not yourself; not the last account).
+    **Account registration:** Configure **`MANAGEMENT_REGISTRATION_SECRET`** in **`GET /api/v1/settings`** / **`PUT /api/v1/settings`** (SQLite `meta.server_settings`). `POST /api/v1/auth/register` requires JSON field **`registrationSecret`** matching that value. **`GET /api/v1/registration-secret`** returns the secret when configured. The **Accounts** page (**`/accounts.html`**) lists users and shows the invite secret (masked) with copy. **`GET /api/v1/accounts`** lists accounts; **`DELETE /api/v1/accounts/{userId}`** removes a user (not yourself; not the last account).
 
-    **Server settings:** Most tunables (TLS path, management port, auth/WebAuthn fallbacks, rate limits, registration/session secrets, network probe timeouts, etc.) live in SQLite **`meta.server_settings`** and override `.env` on startup and after **`PUT /api/v1/settings`**. Bootstrap **`SQLITE_DB_PATH`** (and usually **`TLS_CERT_DIR`** for first boot) remain in `.env` only. Use **`GET /settings.html`** or **`GET /api/v1/settings`**; **`PUT /api/v1/settings`** requires **localhost TCP** (same as **`PUT /ddns`**) plus a session when not same-machine.
+    **Server settings:** Tunables (TLS path, management port, auth/WebAuthn fallbacks, rate limits, registration/session secrets, network probe timeouts, etc.) live in SQLite **`meta.server_settings`**, merged with built-in defaults at startup and after **`PUT /api/v1/settings`**. Use **`GET /settings.html`** or **`GET /api/v1/settings`**; **`PUT /api/v1/settings`** requires **localhost TCP** (same as **`PUT /ddns`**) plus a session when not same-machine.
 
-    **Porkbun-related configuration (three SQLite/env layers):** (1) **DDNS** (automated A/AAAA updates) — stored in **`meta.ddns`**, edited via **`PUT /api/v1/ddns`** or **`/ddns.html`**. (2) **DNS management console links** (open registrar UI per apex) — stored in **`meta.root_domains`** as optional **`dnsConsole`** (`defaultProvider`, **`byApex`**), edited via **`PUT /api/v1/domains`** or the Domains panel. Link resolution order is: **`byApex[apex]`** → **`dnsConsole.defaultProvider`** → **`DNS_CONSOLE_DEFAULT_PROVIDER`** (from **`meta.server_settings`** key **`dnsConsoleDefaultProvider`** or `.env`). (3) **Global fallback only** — **`dnsConsoleDefaultProvider`** in **`meta.server_settings`** when **`dnsConsole`** omits a default or is null. Implementations: DDNS uses the Porkbun JSON API; console links use **`src/infrastructure/dns/console/`** (currently Porkbun only).
+    **Registrar / DDNS configuration:** (1) **DDNS** (automated A/AAAA updates) — stored in **`meta.ddns`** as versioned **`jobs`** (Porkbun JSON API, Namecheap XML API, …), edited via **`PUT /api/v1/ddns`** or **`/ddns.html`** (UI focuses on the legacy **`default`** Porkbun job; multi-job edits use the API). (2) **DNS management console links** (open registrar UI per apex) — stored in **`meta.root_domains`** as optional **`dnsConsole`** (`defaultProvider`, **`byApex`**), edited via **`PUT /api/v1/domains`** or the Domains panel. Link resolution order is: **`byApex[apex]`** → **`dnsConsole.defaultProvider`** → **`dnsConsoleDefaultProvider`** in **`meta.server_settings`**. (3) **Global fallback only** — **`dnsConsoleDefaultProvider`** in **`meta.server_settings`** when **`dnsConsole`** omits a default or is null. Console link implementations live under **`src/infrastructure/dns/console/`** (e.g. Porkbun, Namecheap).
 
 servers:
   - url: http://127.0.0.1:{port}
@@ -49,6 +49,12 @@ paths:
                       status:
                         type: string
                         example: OK
+                      dataPlaneActive:
+                        type: boolean
+                        description: False when the HTTPS proxy (ports 80/443) is not running (e.g. TLS not configured or failed to load).
+                      notice:
+                        type: string
+                        description: Present when `dataPlaneActive` is false; hints to configure TLS and restart.
         "401":
           description: Invalid or missing session
           content:
@@ -71,6 +77,10 @@ paths:
                     type: object
                     properties:
                       status:
+                        type: string
+                      dataPlaneActive:
+                        type: boolean
+                      notice:
                         type: string
                         example: OK
         "401":
@@ -194,10 +204,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /api/v1/settings:
     get:
-      summary: Effective server settings (SQLite overrides + .env)
+      summary: Effective server settings (SQLite + defaults)
       description: |
         Returns merged settings (camelCase) and which secrets are configured. Does not return secret values.
-        `bootstrapEnvKeys` lists variables that must stay in `.env` (not stored in SQLite).
+        `bootstrapEnvKeys` is reserved for future use and is currently always empty.
+        `ui` describes field labels, input types, hints, and accordion groups for the management Settings page (same source as `serverSettingsUi.mjs`).
       operationId: getServerSettings
       security:
         - sessionCookie: []
@@ -226,6 +237,10 @@ paths:
                         type: array
                         items:
                           type: string
+                      ui:
+                        type: object
+                        description: Settings page field metadata and groups
+                        additionalProperties: true
         "401":
           description: Unauthorized for remote clients without session
           content:
@@ -241,9 +256,10 @@ paths:
     put:
       summary: Update server settings in SQLite
       description: |
-        Partial JSON body (camelCase keys). Use `null` for a key to remove the SQLite override and fall back to `.env`.
+        Partial JSON body (camelCase keys). Use `null` for a key to remove the SQLite override and fall back to the built-in default.
         Secrets (`managementRegistrationSecret`, `managementSessionSecret`) are strings when set.
         Requires localhost binding; remote clients need a session. Restart the process for some changes (port, TLS dir, session secret, trust proxy, rate limits) to apply everywhere.
+        Response includes the same `ui` field metadata as `GET /api/v1/settings` for the Settings page.
       operationId: putServerSettings
       security:
         - sessionCookie: []
@@ -455,6 +471,10 @@ paths:
         The background scheduler uses only SQLite—environment variables are not used for DDNS.
         API keys are never returned in JSON—only whether credentials appear configured. Includes `cachedPublicIp`
         from SQLite after a successful sync when persistence exposes the database.
+        Multi-job summaries resolve apex-mode domains and registrar eligibility using a single apex list and DNS-console
+        context snapshot per response build (`snapshotDdnsResolveContext` in `src/ddns/ddnsConfigResolve.mjs`), so each job
+        in `jobs` sees the same environment for that request. Response fields `cachedPublicIp`, `cachedPublicIpByJob`,
+        and `lastRun` are best-effort from SQLite meta; omit or null when unreadable.
       operationId: getDdns
       responses:
         "200":
@@ -560,14 +580,22 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /api/v1/ddns/sync:
     post:
-      summary: Run Porkbun DDNS sync once
+      summary: Run DDNS sync once (all jobs or one job)
       description: |
-        Triggers the same sync path as the background scheduler (IP discovery, Porkbun A/AAAA updates, SQLite cache).
-        Persists last-run telemetry to `meta.ddns_last_run`. Requires saved `meta.ddns` settings and localhost TCP
+        Triggers the same sync path as the background scheduler (IP discovery, registrar DNS updates, per-job SQLite IP cache).
+        Persists last-run telemetry to `meta.ddns_last_run` (keyed by job id). Requires saved `meta.ddns` settings and localhost TCP
         (same as `PUT /ddns`); remote clients need a session.
+        Without `jobId`, runs every enabled job with valid credentials and at least one zone. With `?jobId=…`, runs only that job.
       operationId: postDdnsSync
       security:
         - sessionCookie: []
+      parameters:
+        - in: query
+          name: jobId
+          required: false
+          schema:
+            type: string
+          description: Optional DDNS job id; when set, only that job is synced (must be enabled and runnable).
       responses:
         "200":
           description: Sync finished; returns same `data` shape as `GET /api/v1/ddns` (including `lastRun`)
@@ -838,8 +866,19 @@ components:
   schemas:
     DdnsPutRequest:
       type: object
-      required: [enabled]
+      description: |
+        Legacy **v1** body (flat Porkbun-only fields) updates the job with id `default` and preserves other jobs.
+        **v2** body: `{ "version": 2, "jobs": [ ... ] }` replaces the full job list (see per-job `credentials` by `provider`).
       properties:
+        version:
+          type: integer
+          enum: [2]
+          description: When `2`, `jobs` is required and replaces all stored jobs.
+        jobs:
+          type: array
+          description: DDNS jobs when `version` is 2.
+          items:
+            $ref: "#/components/schemas/DdnsJobStored"
         enabled:
           type: boolean
         porkbunApiKey:
@@ -884,8 +923,48 @@ components:
           type: string
           format: uri
           description: Optional Porkbun JSON API v3 base URL; default official endpoint when omitted.
+    DdnsJobStored:
+      type: object
+      description: Normalized DDNS job (stored in SQLite under `meta.ddns` when `version` is 2).
+      required: [id, provider, enabled, credentials, domainMode, domains, matchNote, intervalMs, ipLookupTimeoutMs, ipv4Services, ipv6Services]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+        provider:
+          type: string
+          enum: [porkbun, namecheap]
+        enabled:
+          type: boolean
+        credentials:
+          type: object
+          description: Provider-specific secrets and options (see Porkbun and Namecheap field names in source / examples).
+        domainMode:
+          type: string
+          enum: [apex, explicit]
+        domains:
+          type: array
+          items:
+            type: string
+        matchNote:
+          type: string
+        intervalMs:
+          type: integer
+        ipLookupTimeoutMs:
+          type: integer
+        ipv4Services:
+          type: array
+          items:
+            type: string
+        ipv6Services:
+          type: array
+          items:
+            type: string
     DdnsStatus:
       type: object
+      description: |
+        Public DDNS summary (no API secrets). Job rows share one apex/DNS-console snapshot per response build.
+        Fields `cachedPublicIp`, `cachedPublicIpByJob`, and `lastRun` are populated when SQLite meta is readable.
       required:
         - provider
         - configSource
@@ -952,9 +1031,19 @@ components:
         schedulerState:
           type: string
           enum: [running, disabled, missing_credentials, no_domains, not_configured]
+        schemaVersion:
+          type: integer
+          enum: [2]
+          description: Present when the stored document uses the multi-job schema.
+        jobs:
+          type: array
+          description: Per-job public summaries (no API secrets).
+          items:
+            $ref: "#/components/schemas/DdnsJobSummary"
         cachedPublicIp:
           nullable: true
           type: object
+          description: Cached public IP for the first/default job (same as legacy single-job behavior).
           properties:
             ipv4:
               nullable: true
@@ -962,11 +1051,78 @@ components:
             ipv6:
               nullable: true
               type: string
+        cachedPublicIpByJob:
+          type: object
+          description: Cached public IP per DDNS job id (after at least one successful sync for that job).
+          additionalProperties:
+            nullable: true
+            type: object
+            properties:
+              ipv4:
+                nullable: true
+                type: string
+              ipv6:
+                nullable: true
+                type: string
         lastRun:
-          nullable: true
-          description: Last completed manual or scheduled sync attempt (from `meta.ddns_last_run`).
-          allOf:
-            - $ref: "#/components/schemas/DdnsLastRun"
+          description: Last completed sync attempts per job id (`meta.ddns_last_run`).
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/DdnsLastRunEnvelope"
+    DdnsLastRunEnvelope:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DdnsLastRun"
+    DdnsJobSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+          enum: [porkbun, namecheap]
+        enabled:
+          type: boolean
+        credentialsConfigured:
+          type: boolean
+        domains:
+          type: array
+          items:
+            type: string
+        domainListSource:
+          type: string
+        domainMode:
+          type: string
+        matchNote:
+          type: string
+        intervalMs:
+          type: integer
+        ipLookupTimeoutMs:
+          type: integer
+        ipv4Services:
+          type: array
+          items:
+            type: string
+        ipv6Services:
+          type: array
+          items:
+            type: string
+        porkbunApiBaseUrl:
+          type: string
+        namecheapSandbox:
+          type: boolean
+        namecheapSyncRecordNames:
+          type: array
+          items:
+            type: string
+        schedulerWouldRun:
+          type: boolean
+        schedulerState:
+          type: string
     DdnsLastRun:
       type: object
       required: [at, outcome, detail]

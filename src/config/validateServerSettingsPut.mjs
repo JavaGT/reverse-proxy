@@ -22,10 +22,6 @@ export function validateServerSettingsPut(body) {
         }
 
         if (isSecretKey(k)) {
-            if (v === null) {
-                partial[k] = null;
-                continue;
-            }
             if (typeof v !== "string") {
                 return { ok: false, message: `${k} must be a string` };
             }

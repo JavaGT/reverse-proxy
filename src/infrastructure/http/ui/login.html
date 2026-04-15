@@ -6,18 +6,45 @@
     <title>Sign in · Reverse proxy management</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body class="mgmt-login-page">
-    <rp-mgmt-header tagline="Management · Sign in" brand-href="index.html#overview" tools="signout,theme" current="none"></rp-mgmt-header>
+    <rp-mgmt-header tagline="Management · Sign in" brand-href="index.html#overview" tools="signout,theme"></rp-mgmt-header>
 
-    <main id="main-content" class="mgmt-page">
-        <rp-auth-login></rp-auth-login>
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="auth" current="login"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="About sign-in">
+                    <p class="mgmt-p">Sign in when you open the management UI from another device or a non-loopback address. The same machine often reaches this UI without a session.</p>
+                </div>
+                <rp-auth-login></rp-auth-login>
+            </div>
+        </div>
     </main>
     <script type="module" src="/mgmt-login.mjs"></script>
 </body>

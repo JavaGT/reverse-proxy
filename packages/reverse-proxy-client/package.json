@@ -21,6 +21,10 @@
     "management"
   ],
   "license": "ISC",
+  "homepage": "https://github.com/JavaGT/reverse-proxy/tree/main/packages/reverse-proxy-client",
+  "bugs": {
+    "url": "https://github.com/JavaGT/reverse-proxy/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JavaGT/reverse-proxy.git",

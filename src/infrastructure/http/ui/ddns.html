@@ -6,40 +6,52 @@
     <title>DDNS settings · Reverse proxy</title>
     <script>
         (function () {
-            var t = localStorage.getItem("mgmt_theme");
-            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+            var root = document.documentElement;
+            var t = null;
+            try {
+                t = localStorage.getItem("mgmt_theme");
+            } catch (e) {
+                /* ignore */
+            }
+            if (t === "light") root.setAttribute("data-theme", "light");
+            else if (t === "dark") root.setAttribute("data-theme", "dark");
+            var lightBg = "#eef1f5";
+            var darkBg = "#0f1419";
+            var bg;
+            if (t === "light") bg = lightBg;
+            else if (t === "dark") bg = darkBg;
+            else {
+                try {
+                    bg = window.matchMedia("(prefers-color-scheme: dark)").matches ? darkBg : lightBg;
+                } catch (e) {
+                    bg = lightBg;
+                }
+            }
+            root.style.backgroundColor = bg;
         })();
     </script>
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <rp-mgmt-header tagline="DDNS (Porkbun) · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh" current="ddns"></rp-mgmt-header>
+    <rp-mgmt-header tagline="DDNS (Porkbun) · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
             <section class="mgmt-help-section">
                 <h3 class="mgmt-help-h">Network → local addresses</h3>
                 <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
-                <div class="mgmt-table-collapsible mgmt-table-collapsed">
-                    <div class="mgmt-table-collapsible-bar">
-                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-ddns-help">Show table</button>
-                    </div>
-                    <div class="mgmt-table-collapsible-body" id="mgmt-coll-ddns-help">
-                        <div class="mgmt-table-wrap mgmt-help-table-wrap">
-                            <table class="mgmt-table mgmt-help-table">
-                                <thead>
-                                    <tr><th>Column</th><th>Meaning</th></tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
-                                    <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
-                                    <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
-                                    <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div class="mgmt-table-wrap mgmt-help-table-wrap">
+                    <table class="mgmt-table mgmt-help-table">
+                        <thead>
+                            <tr><th>Column</th><th>Meaning</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Interface</td><td>OS name (e.g. <code>en0</code>, <code>eth0</code>, <code>lo</code>, Docker bridges).</td></tr>
+                            <tr><td>Family</td><td><strong>IPv4</strong> or <strong>IPv6</strong> for that address.</td></tr>
+                            <tr><td>Internal</td><td><strong>yes</strong> = loopback (<code>127.0.0.1</code> / <code>::1</code>). <strong>no</strong> = addresses used on a real network (including private ranges like <code>192.168.x.x</code>).</td></tr>
+                            <tr><td>Address</td><td>The IP string for that interface and family.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
             <section class="mgmt-help-section">
@@ -57,10 +69,19 @@
         </div>
     </rp-mgmt-modal>
 
-    <main id="main-content" class="mgmt-page">
-        <section id="ddns-settings" class="mgmt-section">
-            <rp-ddns-panel></rp-ddns-panel>
-        </section>
+    <main id="main-content" class="mgmt-page mgmt-page--shell">
+        <div class="mgmt-shell">
+            <rp-mgmt-sidebar variant="pages" current="ddns"></rp-mgmt-sidebar>
+            <div class="mgmt-shell-main">
+                <div class="mgmt-page-intro" role="region" aria-label="About DDNS">
+                    <p class="mgmt-p">Optional: keep your Porkbun DNS <strong>A</strong> and <strong>AAAA</strong> records aligned with this server&rsquo;s public IP on a schedule. This does not obtain TLS certificates or register proxy routes.</p>
+                    <p class="mgmt-p mgmt-muted">Start with your API keys below; interval, timeouts, API base, and custom IP discovery URLs sit under <strong>Advanced</strong> unless you need them.</p>
+                </div>
+                <section id="ddns-settings" class="mgmt-section">
+                    <rp-ddns-panel></rp-ddns-panel>
+                </section>
+            </div>
+        </div>
     </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>

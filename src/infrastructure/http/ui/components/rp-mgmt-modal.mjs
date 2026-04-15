@@ -45,6 +45,7 @@ export class RpMgmtModal extends HTMLElement {
                     margin: 0;
                     font-size: 1rem;
                     font-weight: 600;
+                    text-wrap: balance;
                 }
                 :host([density="compact"]) .mgmt-dialog-header h3 {
                     font-size: 0.88rem;
@@ -64,6 +65,7 @@ export class RpMgmtModal extends HTMLElement {
                     padding: 0.75rem;
                     max-height: min(70vh, 28rem);
                     overflow-y: auto;
+                    overscroll-behavior: contain;
                 }
                 :host([density="compact"]) .mgmt-dialog-body {
                     padding: 0.45rem 0.55rem;

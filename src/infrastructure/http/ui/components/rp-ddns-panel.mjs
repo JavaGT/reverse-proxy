@@ -1,5 +1,5 @@
 import { apiFetch } from "../api-client.mjs";
-import { ddnsSchedulerBlurb, escapeHtml, wrapCollapsibleTable } from "../formatters.mjs";
+import { ddnsSchedulerBlurb, escapeHtml } from "../formatters.mjs";
 
 const DEFAULT_PORKBUN_API_BASE = "https://api.porkbun.com/api/json/v3";
 const DEBOUNCE_MS = 450;
@@ -102,16 +102,25 @@ export class RpDdnsPanel extends HTMLElement {
         const { badgeLabel, badgeClass } = this.#ddnsBadge(data);
         const lr = data.lastRun;
         let lastLine = "—";
-        if (lr && typeof lr.at === "string") {
-            const t = escapeHtml(new Date(lr.at).toLocaleString());
-            const oc = escapeHtml(lr.outcome);
-            const det = escapeHtml(lr.detail || "");
-            lastLine = `${t} · <strong>${oc}</strong> · ${det}`;
+        const jobRows = Array.isArray(data.jobs) ? data.jobs : [];
+        if (lr?.jobs && typeof lr.jobs === "object" && !Array.isArray(lr.jobs)) {
+            const parts = [];
+            for (const j of jobRows) {
+                const row = lr.jobs[j.id];
+                if (!row || typeof row.at !== "string") continue;
+                const t = escapeHtml(new Date(row.at).toLocaleString());
+                const oc = escapeHtml(row.outcome);
+                const det = escapeHtml(row.detail || "");
+                parts.push(`<code>${escapeHtml(j.id)}</code> (${escapeHtml(j.provider)}): ${t} · <strong>${oc}</strong> · ${det}`);
+            }
+            if (parts.length) lastLine = parts.join("<br>");
         }
         let nextLine = "—";
-        if (data.enabled && data.configSource === "sqlite" && lr?.at && Number.isFinite(data.intervalMs)) {
-            const next = new Date(new Date(lr.at).getTime() + data.intervalMs);
-            nextLine = `${escapeHtml(next.toLocaleString())} (approx.)`;
+        const j0 = jobRows[0];
+        const lr0 = j0 && lr?.jobs?.[j0.id];
+        if (j0 && data.configSource === "sqlite" && lr0 && typeof lr0.at === "string" && Number.isFinite(j0.intervalMs)) {
+            const next = new Date(new Date(lr0.at).getTime() + j0.intervalMs);
+            nextLine = `${escapeHtml(next.toLocaleString())} (approx., first job)`;
         }
         const canSync =
             data.configSource === "sqlite" &&
@@ -136,7 +145,7 @@ export class RpDdnsPanel extends HTMLElement {
             </div>
             <p class="mgmt-p mgmt-note mgmt-ddns-status-blurb">${escapeHtml(ddnsSchedulerBlurb(data))} Compare with <a href="index.html#network">Network</a> for live public IP and DNS.</p>
             <div class="mgmt-ddns-status-actions">
-                <button type="button" class="mgmt-btn mgmt-btn-primary" id="ddns-sync-now" ${syncHidden}>Run sync now</button>
+                <button type="button" class="mgmt-btn mgmt-btn-primary" id="ddns-sync-now" ${syncHidden}>Run DDNS sync now</button>
                 <a class="mgmt-btn" href="index.html#network">Open Network</a>
             </div>
         </div>`;
@@ -264,7 +273,7 @@ export class RpDdnsPanel extends HTMLElement {
         } else {
             if (hint) {
                 hint.innerHTML =
-                    "Enter <strong>both</strong> Porkbun keys below, then choose <strong>Save initial settings</strong> once. After that, other fields update automatically.";
+                    "Enter <strong>both</strong> Porkbun keys below, then choose <strong>Save initial DDNS settings</strong> once. After that, other fields update automatically.";
             }
             if (boot) boot.hidden = false;
             if (editNote) {
@@ -364,7 +373,7 @@ export class RpDdnsPanel extends HTMLElement {
     async render(options = {}) {
         const silent = options.silent === true;
         if (!silent) {
-            this.innerHTML = "<p class=\"mgmt-p mgmt-note\">Loading DDNS settings…</p>";
+            this.innerHTML = "<p class=\"mgmt-p mgmt-note\" aria-live=\"polite\">Loading DDNS settings…</p>";
         }
         try {
             const { data } = await apiFetch("/api/v1/ddns");
@@ -384,62 +393,10 @@ export class RpDdnsPanel extends HTMLElement {
                     : DEFAULT_PORKBUN_API_BASE
             );
 
-            const advancedBlock = `
-                <h3 class="mgmt-h3">Advanced</h3>
-                <p class="mgmt-p mgmt-note">Optional overrides. Leave discovery lists empty when saving to keep existing URLs (or defaults if this is the first save).</p>
-                <div class="mgmt-form-row">
-                    <label for="ddns-api-base">Porkbun API base URL</label>
-                    <input type="url" id="ddns-api-base" class="mgmt-input" placeholder="${escapeHtml(
-                DEFAULT_PORKBUN_API_BASE
-            )}" value="${apiBaseVal}">
-                </div>
-                <div class="mgmt-form-row">
-                    <label for="ddns-ipv4-services">IPv4 discovery URLs (one per line)</label>
-                    <textarea id="ddns-ipv4-services" rows="4" class="mgmt-textarea" spellcheck="false">${ipv4Textarea}</textarea>
-                </div>
-                <div class="mgmt-form-row">
-                    <label for="ddns-ipv6-services">IPv6 discovery URLs (one per line)</label>
-                    <textarea id="ddns-ipv6-services" rows="4" class="mgmt-textarea" spellcheck="false">${ipv6Textarea}</textarea>
-                </div>`;
-
-            const statusHtml = this.#buildStatusStripHtml(data);
-
-            this.innerHTML = `
-                <rp-panel-toolbar heading="DDNS (Porkbun)"></rp-panel-toolbar>
-                <div id="ddns-summary-root">${statusHtml}</div>
-                <h3 class="mgmt-h3">Edit settings</h3>
-                <p class="mgmt-p mgmt-note" id="ddns-edit-note"></p>
-                <form id="ddns-form" class="mgmt-ddns-form">
-                    <div class="mgmt-form-row mgmt-form-row-check" data-ddns-field="enabled">
-                        <label><input type="checkbox" id="ddns-enabled" ${data.enabled ? "checked" : ""}> Enable DDNS</label>
-                    </div>
-                    <p class="mgmt-note mgmt-ddns-enable-hint" id="ddns-enable-hint"></p>
-                    <div data-ddns-field="keys">
-                    <div class="mgmt-form-row">
-                        <label for="ddns-api-key">Porkbun API key</label>
-                        <input type="password" id="ddns-api-key" autocomplete="off" placeholder="unchanged if empty">
-                    </div>
-                    <div class="mgmt-form-row">
-                        <label for="ddns-secret-key">Porkbun secret key</label>
-                        <input type="password" id="ddns-secret-key" autocomplete="off" placeholder="unchanged if empty">
-                    </div>
-                    </div>
-                    <fieldset class="mgmt-fieldset" data-ddns-field="zones">
-                        <legend class="mgmt-legend">Zones</legend>
-                        <label class="mgmt-radio-line"><input type="radio" name="ddns-domain-mode" value="apex" ${apexChecked}> Use configured apex domains (Domains panel / SQLite)</label>
-                        <label class="mgmt-radio-line"><input type="radio" name="ddns-domain-mode" value="explicit" ${explicitChecked}> Explicit apex list</label>
-                    </fieldset>
-                    <div class="mgmt-form-row" id="ddns-domains-row" data-ddns-field="domains">
-                        <label for="ddns-domains">Domains (one per line or comma-separated)</label>
-                        <textarea id="ddns-domains" rows="3" class="mgmt-textarea" placeholder="example.com">${escapeHtml(
-                domainsValue
-            )}</textarea>
-                    </div>
-                    <div class="mgmt-form-row" data-ddns-field="match">
-                        <label for="ddns-match">Match note</label>
-                        <input type="text" id="ddns-match" value="${escapeHtml(data.matchNote || "")}" required maxlength="512">
-                    </div>
-                    <p class="mgmt-note mgmt-ddns-match-hint">Porkbun stores a <strong>notes</strong> string on each DNS record. This reverse proxy only updates <strong>A</strong> and <strong>AAAA</strong> records whose <strong>notes</strong> field is <em>exactly</em> this value; other records are never touched. Use a dedicated tag (for example the default <code>match:reverse-proxy-ddns</code>) so DDNS does not overwrite rows you manage elsewhere.</p>
+            const advancedDetailsHtml = `<details class="mgmt-details mgmt-ddns-timing-details">
+                <summary>Advanced: interval, timeouts, API base, IP discovery</summary>
+                <div class="mgmt-details-body">
+                    <p class="mgmt-p mgmt-note">You usually leave these alone. Open when you need a different sync cadence, longer IP lookups, a custom Porkbun API URL, or non-default &ldquo;what is my IP&rdquo; endpoints. Leave discovery lists empty when saving to keep existing URLs (or defaults on first save).</p>
                     <div class="mgmt-form-row" data-ddns-field="interval">
                         <label for="ddns-interval">Interval (ms)</label>
                         <input type="number" id="ddns-interval" min="10000" max="86400000" step="1000" value="${escapeHtml(
@@ -453,12 +410,93 @@ export class RpDdnsPanel extends HTMLElement {
             )}" required>
                     </div>
                     <div data-ddns-field="advanced">
-                    ${wrapCollapsibleTable(`<div class="mgmt-ddns-advanced-inner">${advancedBlock}</div>`)}
+                    <div class="mgmt-form-row">
+                    <label for="ddns-api-base">Porkbun API base URL</label>
+                    <input type="url" id="ddns-api-base" class="mgmt-input" placeholder="${escapeHtml(
+                DEFAULT_PORKBUN_API_BASE
+            )}…" value="${apiBaseVal}">
+                </div>
+                <div class="mgmt-form-row">
+                    <label for="ddns-ipv4-services">IPv4 discovery URLs (one per line)</label>
+                    <textarea id="ddns-ipv4-services" rows="4" class="mgmt-textarea" spellcheck="false" placeholder="https://…">${ipv4Textarea}</textarea>
+                </div>
+                <div class="mgmt-form-row">
+                    <label for="ddns-ipv6-services">IPv6 discovery URLs (one per line)</label>
+                    <textarea id="ddns-ipv6-services" rows="4" class="mgmt-textarea" spellcheck="false" placeholder="https://…">${ipv6Textarea}</textarea>
+                </div>
                     </div>
-                    <p class="mgmt-note" id="ddns-form-status" aria-live="polite"></p>
+                </div>
+            </details>`;
+
+            const statusHtml = this.#buildStatusStripHtml(data);
+
+            const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+            const jobsTable =
+                jobs.length > 0
+                    ? `<div class="mgmt-ddns-jobs-overview"><h3 class="mgmt-h3">Jobs</h3>
+                <table class="mgmt-table mgmt-ddns-jobs-table" aria-label="DDNS jobs">
+                <thead><tr><th>Id</th><th>Provider</th><th>Zones</th><th>State</th></tr></thead>
+                <tbody>${jobs
+                    .map(
+                        j => `<tr><td><code>${escapeHtml(j.id)}</code></td><td>${escapeHtml(j.provider)}</td>
+                        <td>${escapeHtml(String((j.domains || []).length))} zone(s)</td>
+                        <td><code>${escapeHtml(j.schedulerState || "")}</code></td></tr>`
+                    )
+                    .join("")}</tbody></table></div>`
+                    : "";
+            const multiHint =
+                jobs.length > 1
+                    ? `<p class="mgmt-p mgmt-note">Multiple jobs are configured. This form edits the legacy <strong>default</strong> Porkbun job only; add or edit other providers via <code>PUT /api/v1/ddns</code> with <code>version: 2</code> and a <code>jobs</code> array.</p>`
+                    : "";
+
+            this.innerHTML = `
+                <rp-panel-toolbar heading="DDNS"></rp-panel-toolbar>
+                <ul class="mgmt-ddns-bullets" aria-label="What DDNS does when enabled">
+                    <li>Looks up this host&rsquo;s public IPv4 and IPv6 on your chosen interval.</li>
+                    <li><strong>Porkbun:</strong> updates only <strong>A</strong> / <strong>AAAA</strong> rows whose <strong>notes</strong> match your match note. <strong>Namecheap:</strong> updates <strong>A</strong> / <strong>AAAA</strong> for configured host names (e.g. <code>@</code>).</li>
+                    <li>Runs in the background; use <a href="index.html#network">Network</a> to confirm IP addresses and DNS.</li>
+                </ul>
+                <div id="ddns-summary-root">${statusHtml}</div>
+                ${jobsTable}
+                ${multiHint}
+                <h3 class="mgmt-h3">Edit settings</h3>
+                <p class="mgmt-p mgmt-note" id="ddns-edit-note"></p>
+                <form id="ddns-form" class="mgmt-ddns-form">
+                    <div class="mgmt-form-row mgmt-form-row-check" data-ddns-field="enabled">
+                        <label><input type="checkbox" id="ddns-enabled" ${data.enabled ? "checked" : ""}> Enable DDNS</label>
+                    </div>
+                    <p class="mgmt-note mgmt-ddns-enable-hint" id="ddns-enable-hint"></p>
+                    <div data-ddns-field="keys">
+                    <div class="mgmt-form-row">
+                        <label for="ddns-api-key">Porkbun API key</label>
+                        <input type="password" id="ddns-api-key" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep stored key…">
+                    </div>
+                    <div class="mgmt-form-row">
+                        <label for="ddns-secret-key">Porkbun secret key</label>
+                        <input type="password" id="ddns-secret-key" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep stored key…">
+                    </div>
+                    </div>
+                    <fieldset class="mgmt-fieldset" data-ddns-field="zones">
+                        <legend class="mgmt-legend">Zones</legend>
+                        <label class="mgmt-radio-line"><input type="radio" name="ddns-domain-mode" value="apex" ${apexChecked}> Apex domains whose DNS console is <strong>Porkbun</strong> (Domains panel overrides / default; unset → all apexes)</label>
+                        <label class="mgmt-radio-line"><input type="radio" name="ddns-domain-mode" value="explicit" ${explicitChecked}> Explicit apex list</label>
+                    </fieldset>
+                    <div class="mgmt-form-row" id="ddns-domains-row" data-ddns-field="domains">
+                        <label for="ddns-domains">Domains (one per line or comma-separated)</label>
+                        <textarea id="ddns-domains" rows="3" class="mgmt-textarea" spellcheck="false" placeholder="example.com…">${escapeHtml(
+                domainsValue
+            )}</textarea>
+                    </div>
+                    <div class="mgmt-form-row" data-ddns-field="match">
+                        <label for="ddns-match">Match note</label>
+                        <input type="text" id="ddns-match" value="${escapeHtml(data.matchNote || "")}" required maxlength="512" spellcheck="false" placeholder="e.g. match:reverse-proxy-ddns…">
+                    </div>
+                    <p class="mgmt-note mgmt-ddns-match-hint">Porkbun stores a <strong>notes</strong> string on each DNS record. This reverse proxy only updates <strong>A</strong> and <strong>AAAA</strong> records whose <strong>notes</strong> field is <em>exactly</em> this value; other records are never touched. Use a dedicated tag (for example the default <code>match:reverse-proxy-ddns</code>) so DDNS does not overwrite rows you manage elsewhere.</p>
+                    ${advancedDetailsHtml}
+                    <p class="mgmt-note" id="ddns-form-status" aria-live="polite" role="status"></p>
                     <div class="mgmt-form-actions">
-                        <button type="submit" class="mgmt-btn mgmt-btn-primary" id="ddns-bootstrap-save">Save initial settings</button>
-                        <button type="button" class="mgmt-btn" id="ddns-clear">Clear saved settings</button>
+                        <button type="submit" class="mgmt-btn mgmt-btn-primary" id="ddns-bootstrap-save">Save initial DDNS settings</button>
+                        <button type="button" class="mgmt-btn" id="ddns-clear">Remove saved DDNS</button>
                     </div>
                 </form>`;
             this.#wire();

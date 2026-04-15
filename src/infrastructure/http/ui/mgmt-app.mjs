@@ -5,12 +5,10 @@
 import "./mgmt-local-operator.mjs";
 import "./mgmt-custom-elements.mjs";
 import { initMgmtSessionBar } from "./mgmt-session.mjs";
-import { initMgmtCollapsibleTables } from "./mgmt-collapsible-tables.mjs";
 import { initMgmtTheme } from "./mgmt-theme.mjs";
 import { initMgmtHelpModal } from "./mgmt-help.mjs";
 
 initMgmtSessionBar();
-initMgmtCollapsibleTables();
 initMgmtTheme();
 initMgmtHelpModal();
 

@@ -1,6 +1,6 @@
 # @javagt/reverse-proxy-client
 
-Programmatic client and CLI for the reverse-proxy **management API** (`/api/v1/...` on `127.0.0.1`) and optional **SQLite** access when the server is down. The server serves integration notes at **`GET /llms.txt`** (includes this package) and machine-readable **`GET /api/v1/openapi.yaml`**.
+This package is published on **[npm](https://www.npmjs.com/package/@javagt/reverse-proxy-client)** as **`@javagt/reverse-proxy-client`**; source code lives in the **[reverse-proxy](https://github.com/JavaGT/reverse-proxy)** repo under [`packages/reverse-proxy-client`](https://github.com/JavaGT/reverse-proxy/tree/main/packages/reverse-proxy-client). It is a programmatic client and CLI for the reverse-proxy **management API** (`/api/v1/...` on `127.0.0.1`) and optional **SQLite** access when the server is down. The server serves integration notes at **`GET /llms.txt`** (includes this package) and machine-readable **`GET /api/v1/openapi.yaml`**.
 
 ## Install
 
@@ -9,8 +9,6 @@ Programmatic client and CLI for the reverse-proxy **management API** (`/api/v1/.
 ```bash
 npm install @javagt/reverse-proxy-client
 ```
-
-Package page: [npmjs.com/package/@javagt/reverse-proxy-client](https://www.npmjs.com/package/@javagt/reverse-proxy-client).
 
 **From the reverse-proxy monorepo root** (workspace links the package automatically):
 
@@ -32,21 +30,24 @@ npm install @javagt/reverse-proxy-client@file:../reverse-proxy/packages/reverse-
 
 ### Management base URL (port discovery)
 
-The proxy listens on **`127.0.0.1`**; the port comes from the server’s **`MANAGEMENT_INTERFACE_PORT`** (default **24789**). The HTTP client does **not** read the environment by itself — pass an explicit `baseUrl`.
+The proxy listens on **`127.0.0.1`**; the port is configured in SQLite (**`managementInterfacePort`**, default **24789**). Pass an explicit `baseUrl` to the HTTP client.
 
-- **CLI:** uses `MANAGEMENT_URL` if set, else `--url`, else `http://127.0.0.1:24789`.
-- **Library:** mirror that in your app, for example:
+- **CLI:** uses `--url` if set, else `http://127.0.0.1:24789`.
+- **Library:** pass the URL your server is bound to, for example:
 
 ```js
-const managementPort = process.env.MANAGEMENT_INTERFACE_PORT || "24789";
-const baseUrl =
-    process.env.MANAGEMENT_URL?.replace(/\/$/, "") ||
-    `http://127.0.0.1:${managementPort}`;
+const baseUrl = "http://127.0.0.1:24789";
 
 const http = createHttpClient({ baseUrl });
 ```
 
-Use the same `MANAGEMENT_URL` / port as the reverse-proxy `.env` so co-located tools stay in sync when the management port is changed.
+Use the same port as **`managementInterfacePort`** in the server’s Settings so co-located tools stay in sync when it is changed.
+
+### DDNS and offline behavior (details)
+
+- The management server builds multi-job DDNS summaries with one apex list and DNS-console/env snapshot per response (see **`snapshotDdnsResolveContext`** in the main repo’s **`src/ddns/ddnsConfigResolve.mjs`**). That keeps job rows consistent within a single `GET` without re-reading settings per job.
+- **`createDbClient({ dbPath })`** without **`env`**: merges sparse **`meta.server_settings`** from SQLite with the same defaults the server uses, so offline calls align with persisted **`managementInterfacePort`** and related settings.
+- SQLite DDNS reads (`getDdns`, `putDdns`, `deleteDdns`) attach **`cachedPublicIp`**, **`cachedPublicIpByJob`**, and **`lastRun`** when the DB is available. If reading the per-job IP cache from **`meta` fails, the response still succeeds**; a one-line message may be printed to **stderr** for diagnostics (`[@javagt/reverse-proxy-client] DDNS cached IP read failed (non-fatal): …`).
 
 ## SQLite (offline) mode
 
@@ -63,10 +64,7 @@ import {
     ManagementApiError
 } from "@javagt/reverse-proxy-client";
 
-const managementPort = process.env.MANAGEMENT_INTERFACE_PORT || "24789";
-const baseUrl =
-    process.env.MANAGEMENT_URL?.replace(/\/$/, "") ||
-    `http://127.0.0.1:${managementPort}`;
+const baseUrl = "http://127.0.0.1:24789";
 
 const http = createHttpClient({
     baseUrl
@@ -75,8 +73,7 @@ const http = createHttpClient({
 const { data: routes } = await http.getRoutes();
 
 const db = createDbClient({
-    dbPath: process.env.SQLITE_DB_PATH || "./reverse-proxy.db",
-    env: process.env
+    dbPath: "./reverse-proxy.db"
 });
 
 const auto = createAutoClient({
@@ -115,9 +112,10 @@ npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns get
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns set --file ./ddns-body.json
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns clear
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns sync
+# optional: --job <jobId> to sync a single DDNS job
 ```
 
-Flags: `--url`, `--db`, `--mode auto|http|db`, `--json`, `--file` (JSON bodies for `domains set` / `reserve` / `scan` / `ddns set`). Environment: `MANAGEMENT_URL`, `SQLITE_DB_PATH`.
+Flags: `--url`, `--db`, `--mode auto|http|db`, `--json`, `--file` (JSON bodies for `domains set` / `reserve` / `scan` / `ddns set`). Defaults: `--url http://127.0.0.1:24789`, `--db ./reverse-proxy.db`.
 
 **DDNS:** `ddns get` is read-only over HTTP. `ddns set`, `ddns sync`, and `ddns clear` hit the management server on localhost (same rules as `PUT` / `DELETE /api/v1/ddns` and `POST /api/v1/ddns/sync`: loopback needs no session; non-loopback needs a session cookie). `ddns sync` is HTTP-only. In `--mode db`, stop the proxy before `ddns set` or `ddns clear`.
 

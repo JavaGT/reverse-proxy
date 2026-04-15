@@ -1,6 +1,7 @@
 /** Registers management dashboard custom elements. */
 
 import { RpMgmtHeader } from "./components/rp-mgmt-header.mjs";
+import { RpMgmtSidebar } from "./components/rp-mgmt-sidebar.mjs";
 import { RpPanelToolbar } from "./components/rp-panel-toolbar.mjs";
 import { RpMgmtModal } from "./components/rp-mgmt-modal.mjs";
 import { RpApexDomainsPanel } from "./components/rp-apex-domains-panel.mjs";
@@ -13,6 +14,7 @@ import { RpAccountsApp } from "./components/rp-accounts-app.mjs";
 import { RpSettingsApp } from "./components/rp-settings-app.mjs";
 
 customElements.define("rp-mgmt-header", RpMgmtHeader);
+customElements.define("rp-mgmt-sidebar", RpMgmtSidebar);
 customElements.define("rp-panel-toolbar", RpPanelToolbar);
 customElements.define("rp-mgmt-modal", RpMgmtModal);
 customElements.define("rp-apex-domains-panel", RpApexDomainsPanel);

@@ -148,7 +148,9 @@ test("GET /api/v1/settings returns settings envelope", async () => {
         assert.strictEqual(res.status, 200);
         const j = await res.json();
         assert.ok(j.data?.settings && typeof j.data.settings === "object");
-        assert.ok(Array.isArray(j.data?.bootstrapEnvKeys));
+        assert.deepStrictEqual(j.data?.bootstrapEnvKeys, []);
+        assert.ok(Array.isArray(j.data?.ui?.fields) && j.data.ui.fields.length > 0);
+        assert.ok(Array.isArray(j.data?.ui?.groups) && j.data.ui.groups.length > 0);
     } finally {
         await server.stop();
     }
@@ -326,6 +328,9 @@ test("GET /api/v1/ddns returns read-only Porkbun summary from SQLite row (no API
 
         assert.strictEqual(json.data.enabled, true);
         assert.strictEqual(json.data.credentialsConfigured, true);
+        assert.strictEqual(json.data.schemaVersion, 2);
+        assert.ok(Array.isArray(json.data.jobs));
+        assert.strictEqual(json.data.jobs.length, 1);
         assert.strictEqual(json.data.provider, "porkbun");
         assert.strictEqual(json.data.domainListSource, "STORED_EXPLICIT");
         assert.deepStrictEqual(json.data.domains, ["ddns.example", "other.example"]);
@@ -750,6 +755,34 @@ test("GET /api/v1/health and /health are allowed without session (login.html loc
     }
 });
 
+test("data-plane same-host header bypasses session when X-Forwarded-For does not match iface/egress", async () => {
+    const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    const { MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER } = await import(
+        "../../src/shared/utils/RequestUtils.mjs"
+    );
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/domains`, {
+            headers: {
+                Accept: "application/json",
+                "x-forwarded-for": "192.0.2.50",
+                [MANAGEMENT_DATA_PLANE_SAME_HOST_HEADER]: "1"
+            }
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get("x-management-local-operator"), "1");
+    } finally {
+        await server.stop();
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+    }
+});
+
 test("forwarded client IP matching this host bypasses session gate", async t => {
     const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
     process.env.MANAGEMENT_TRUST_PROXY = "1";
@@ -840,10 +873,12 @@ test("ManagementServer stop clears public egress refresh interval", async () => 
 });
 
 test("GET /api/v1/registration-secret from localhost works without session (local operator)", async () => {
-    const prev = process.env.MANAGEMENT_REGISTRATION_SECRET;
-    process.env.MANAGEMENT_REGISTRATION_SECRET = "invite-from-local-test";
+    const persistence = {
+        ...mockPersistence,
+        getServerSettings: () => ({ managementRegistrationSecret: "invite-from-local-test" })
+    };
     const registry = new RouteRegistry("example.com");
-    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const controller = new ManagementController(registry, persistence, mockLogger);
     const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
 
     try {
@@ -857,8 +892,6 @@ test("GET /api/v1/registration-secret from localhost works without session (loca
         assert.strictEqual(j.data?.secret, "invite-from-local-test");
     } finally {
         await server.stop();
-        if (prev === undefined) delete process.env.MANAGEMENT_REGISTRATION_SECRET;
-        else process.env.MANAGEMENT_REGISTRATION_SECRET = prev;
     }
 });
 

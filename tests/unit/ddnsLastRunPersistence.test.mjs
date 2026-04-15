@@ -19,7 +19,7 @@ test("getDdnsLastRun round-trip via saveDdnsLastRun", () => {
         };
         p.saveDdnsLastRun(row);
         const got = p.getDdnsLastRun();
-        assert.deepStrictEqual(got, row);
+        assert.deepStrictEqual(got, { jobs: { default: row } });
     } finally {
         try {
             fs.unlinkSync(dbPath);
