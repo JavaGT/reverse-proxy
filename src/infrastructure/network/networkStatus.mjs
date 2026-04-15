@@ -150,7 +150,7 @@ async function fetchPublicIpFromServices(urls, timeoutMs, kind) {
 /**
  * @param {{ ipv4Services?: string[], ipv6Services?: string[], ipLookupTimeoutMs?: number }} [options]
  */
-async function lookupPublicIps(options = {}) {
+export async function lookupPublicIps(options = {}) {
     const ipLookupTimeoutMs = options.ipLookupTimeoutMs ?? parseTimeoutMs(process.env.IP_LOOKUP_TIMEOUT_MS, 8000);
     const ipv4Services = options.ipv4Services ?? DEFAULT_IPV4_SERVICES;
     const ipv6Services = options.ipv6Services ?? DEFAULT_IPV6_SERVICES;

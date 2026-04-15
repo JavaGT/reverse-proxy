@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in · Reverse proxy management</title>
+    <script>
+        (function () {
+            var t = localStorage.getItem("mgmt_theme");
+            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        })();
+    </script>
+    <link rel="stylesheet" href="/mgmt.css">
+</head>
+<body class="mgmt-login-page">
+    <rp-mgmt-header tagline="Management · Sign in" brand-href="index.html#overview" tools="signout,theme" current="none"></rp-mgmt-header>
+
+    <main id="main-content" class="mgmt-page">
+        <rp-auth-login></rp-auth-login>
+    </main>
+    <script type="module" src="/mgmt-login.mjs"></script>
+</body>
+</html>

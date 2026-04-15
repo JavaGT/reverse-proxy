@@ -1,14 +1,22 @@
-/* Wikipedia / old-Reddit inspired: content-first, minimal chrome */
+/* Calm admin UI: readable type, soft surfaces, progressive disclosure */
 
 :root {
     color-scheme: light;
-    --bg: #f6f6f6;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --bg: #eef1f5;
     --panel: #ffffff;
-    --border: #a7a7a7;
-    --text: #202122;
-    --muted: #54595d;
-    --link: #0645ad;
-    --link-visited: #0b0080;
+    --panel-muted: #f8fafc;
+    --border: #c9d1dc;
+    --border-subtle: #e2e8f0;
+    --text: #0f172a;
+    --muted: #475569;
+    --link: #1d4ed8;
+    --link-visited: #6d28d9;
     --thead: #eaecf0;
     --code-bg: #f8f9fa;
     --code-border: #eaecf0;
@@ -28,20 +36,25 @@
     --btn-delete-border: #e8a8a8;
     --btn-delete-hover: #fee2e2;
     --btn-delete-text: #991b1b;
-    --app-bar-h: 2.35rem;
-    --modal-overlay: rgba(0, 0, 0, 0.45);
+    --app-bar-h: 3.25rem;
+    --focus-ring: #2563eb;
+    --modal-overlay: rgba(15, 23, 42, 0.45);
 }
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
         color-scheme: dark;
-        --bg: #1a1a1a;
-        --panel: #242424;
-        --border: #5c5c5c;
-        --text: #e8e8e8;
-        --muted: #a8a8a8;
-        --link: #6cb3ff;
-        --link-visited: #c9a8ff;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+        --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+        --bg: #0f1419;
+        --panel: #1a222d;
+        --panel-muted: #141b24;
+        --border: #3d4f66;
+        --border-subtle: #2a3544;
+        --text: #e8edf4;
+        --muted: #94a3b8;
+        --link: #7cb3ff;
+        --link-visited: #c4a8ff;
         --thead: #333333;
         --code-bg: #2c2c2c;
         --code-border: #444444;
@@ -61,19 +74,61 @@
         --btn-delete-border: #8f2626;
         --btn-delete-hover: #5c1616;
         --btn-delete-text: #fecaca;
-        --modal-overlay: rgba(0, 0, 0, 0.55);
+        --focus-ring: #93c5fd;
+        --modal-overlay: rgba(0, 0, 0, 0.6);
     }
+}
+
+/* Skip link: off-screen until keyboard focus */
+.mgmt-skip-link {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.mgmt-skip-link:focus {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 10000;
+    width: auto;
+    height: auto;
+    padding: 0.4rem 0.75rem;
+    margin: 0;
+    clip: auto;
+    overflow: visible;
+    white-space: normal;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+/* Same-machine management: remote auth is bypassed; sign-out is a no-op server-side. */
+body.mgmt-local-operator #mgmt-sign-out {
+    display: none;
 }
 
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #1a1a1a;
-    --panel: #242424;
-    --border: #5c5c5c;
-    --text: #e8e8e8;
-    --muted: #a8a8a8;
-    --link: #6cb3ff;
-    --link-visited: #c9a8ff;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+    --bg: #0f1419;
+    --panel: #1a222d;
+    --panel-muted: #141b24;
+    --border: #3d4f66;
+    --border-subtle: #2a3544;
+    --text: #e8edf4;
+    --muted: #94a3b8;
+    --link: #7cb3ff;
+    --link-visited: #c4a8ff;
     --thead: #333333;
     --code-bg: #2c2c2c;
     --code-border: #444444;
@@ -93,7 +148,8 @@
     --btn-delete-border: #8f2626;
     --btn-delete-hover: #5c1616;
     --btn-delete-text: #fecaca;
-    --modal-overlay: rgba(0, 0, 0, 0.55);
+    --focus-ring: #93c5fd;
+    --modal-overlay: rgba(0, 0, 0, 0.6);
 }
 
 :root[data-theme="light"] {
@@ -104,17 +160,23 @@
     box-sizing: border-box;
 }
 
+:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
 html {
     scroll-behavior: smooth;
 }
 
 body {
     margin: 0;
-    font-family: "Linux Libertine", "Georgia", "Times New Roman", Times, serif;
-    font-size: 0.875rem;
-    line-height: 1.45;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.5;
     color: var(--text);
     background: var(--bg);
+    -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -145,21 +207,22 @@ pre {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    box-shadow: var(--shadow-sm);
 }
 
 .mgmt-app-bar-inner {
     max-width: 960px;
     margin: 0 auto;
-    padding: 0.22rem 0.5rem;
+    padding: 0.5rem 0.75rem;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.3rem 0.65rem;
+    gap: 0.45rem 0.75rem;
     justify-content: space-between;
 }
 
@@ -172,9 +235,10 @@ pre {
 }
 
 .mgmt-app-title {
-    font-family: "Linux Libertine", Georgia, Times, serif;
+    font-family: var(--font-sans);
     font-size: 1rem;
-    font-weight: normal;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     margin: 0;
     border: none;
     padding: 0;
@@ -269,63 +333,305 @@ button.mgmt-theme-cycle {
     max-width: 11rem;
 }
 
+.mgmt-invite-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.35rem;
+    margin-right: 0.25rem;
+}
+
+.mgmt-invite-tools[hidden] {
+    display: none !important;
+}
+
+.mgmt-invite-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.mgmt-invite-input {
+    max-width: 10rem;
+    font-size: 0.8rem;
+}
+
+.mgmt-app-nav-ddns-sep {
+    margin: 0 0.2rem;
+    color: var(--muted);
+}
+
+.mgmt-account-invite-block {
+    margin-top: 0.35rem;
+    max-width: 28rem;
+}
+
+.mgmt-account-invite-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+}
+
+.mgmt-account-invite-controls .mgmt-invite-input {
+    flex: 1 1 12rem;
+    max-width: min(100%, 22rem);
+    min-width: 8rem;
+}
+
+.mgmt-table-empty {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.mgmt-h3 {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0.85rem 0 0.4rem;
+    color: var(--text);
+}
+
+.mgmt-security-block {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--divider);
+}
+
+.mgmt-security-block:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.mgmt-security-wizard {
+    margin: 0.65rem 0;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+}
+
+.mgmt-twofa-qr-wrap {
+    margin: 0.5rem 0;
+}
+
+.mgmt-twofa-qr-wrap img {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.mgmt-mono {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
+.mgmt-twofa-recovery {
+    margin: 0.65rem 0;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--code-bg);
+}
+
+.mgmt-recovery-codes {
+    margin: 0.35rem 0 0;
+    padding-left: 1.25rem;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.88rem;
+}
+
+.mgmt-security-reauth {
+    margin-top: 0.65rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.mgmt-passkeys-list {
+    list-style: none;
+    margin: 0.5rem 0;
+    padding: 0;
+}
+
+.mgmt-passkeys-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--divider);
+}
+
+.mgmt-passkeys-list li:last-child {
+    border-bottom: none;
+}
+
+.mgmt-passkeys-meta {
+    flex: 1 1 12rem;
+}
+
+.mgmt-passkeys-meta strong {
+    font-weight: 600;
+}
+
+.mgmt-passkeys-sub {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+}
+
+.mgmt-passkeys-empty {
+    color: var(--muted);
+    font-style: italic;
+    border: none;
+    padding: 0.25rem 0;
+}
+
+.mgmt-settings-fields {
+    max-width: 36rem;
+}
+
+.mgmt-settings-fields .mgmt-login-field input[type="text"],
+.mgmt-settings-fields .mgmt-login-field input[type="number"],
+.mgmt-settings-fields .mgmt-login-field input[type="password"] {
+    max-width: 100%;
+}
+
 .mgmt-page {
     max-width: 960px;
     margin: 0 auto;
-    padding: 0.45rem 0.65rem 1.5rem;
+    padding: 0.75rem 0.85rem 2.5rem;
 }
 
 .mgmt-masthead {
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .mgmt-masthead h1 {
-    font-family: "Linux Libertine", Georgia, Times, serif;
-    font-size: 1.75rem;
-    font-weight: normal;
-    margin: 0 0 0.25rem;
+    font-family: var(--font-sans);
+    font-size: 1.5rem;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    margin: 0 0 0.35rem;
     border-bottom: none;
 }
 
 .mgmt-sub {
     color: var(--muted);
     font-size: 0.9rem;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    max-width: 42rem;
 }
 
 .mgmt-section {
     margin-bottom: 1rem;
-    padding-bottom: 0.35rem;
-    border-bottom: 1px solid var(--divider);
-    scroll-margin-top: calc(var(--app-bar-h) + 0.35rem);
+    padding: 1rem 1.1rem 1.1rem;
+    background: var(--panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    scroll-margin-top: calc(var(--app-bar-h) + 0.75rem);
 }
 
 .mgmt-section > h2 {
-    font-family: "Linux Libertine", Georgia, Times, serif;
-    font-size: 1.1rem;
-    font-weight: normal;
-    margin: 0 0 0.3rem;
-    padding-top: 0.15rem;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem;
+    padding-top: 0;
+    color: var(--text);
 }
 
 .mgmt-section h3 {
-    font-family: system-ui, sans-serif;
-    font-size: 0.92rem;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
     font-weight: 600;
-    margin: 0.5rem 0 0.25rem;
+    margin: 0.65rem 0 0.35rem;
+    color: var(--text);
 }
 
 .mgmt-p {
-    font-family: system-ui, sans-serif;
-    margin: 0.2rem 0 0.4rem;
-    max-width: none;
+    font-family: var(--font-sans);
+    margin: 0.25rem 0 0.5rem;
+    max-width: 52rem;
+    line-height: 1.55;
 }
 
 .mgmt-muted {
     color: var(--muted);
     font-size: 0.92em;
+}
+
+/* Native disclosure blocks (progressive detail) */
+.mgmt-details {
+    margin: 0.65rem 0 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--panel-muted);
+    overflow: hidden;
+}
+
+.mgmt-details > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.55rem 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
+    user-select: none;
+}
+
+.mgmt-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.mgmt-details > summary::after {
+    content: "";
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: 0.45rem;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg);
+    vertical-align: 0.15em;
+    transition: transform 0.15s ease;
+}
+
+.mgmt-details[open] > summary::after {
+    transform: rotate(-135deg);
+    vertical-align: -0.05em;
+}
+
+.mgmt-details-body {
+    padding: 0 0.85rem 0.85rem;
+    border-top: 1px solid var(--border-subtle);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+
+.mgmt-details-body > *:first-child {
+    margin-top: 0.65rem;
+}
+
+.mgmt-settings-group {
+    margin-bottom: 0.75rem;
+}
+
+.mgmt-settings-group:last-child {
+    margin-bottom: 0;
 }
 
 /* Reusable panel toolbar (also used inside web components) */
@@ -339,12 +645,13 @@ button.mgmt-theme-cycle {
 }
 
 .mgmt-panel-head .mgmt-panel-title {
-    font-family: "Linux Libertine", Georgia, Times, serif;
-    font-size: 1.08rem;
-    font-weight: normal;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
     margin: 0;
     padding-top: 0.1rem;
-    line-height: 1.2;
+    line-height: 1.25;
 }
 
 .mgmt-panel-actions {
@@ -362,12 +669,14 @@ button.mgmt-theme-cycle {
 .mgmt-table-collapsible-bar {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 0.12rem;
+    margin-bottom: 0.25rem;
 }
 
 .mgmt-table-collapsible .mgmt-table-toggle {
-    font-size: 0.72rem;
-    padding: 0.08rem 0.35rem;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: var(--radius-sm);
+    min-height: 2rem;
 }
 
 .mgmt-table-collapsible.mgmt-table-collapsed .mgmt-table-collapsible-body {
@@ -386,22 +695,24 @@ button.mgmt-theme-cycle {
 
 .mgmt-table-wrap {
     overflow-x: auto;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
     background: var(--panel);
     margin: 0.3rem 0 0.55rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 table.mgmt-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.8rem;
 }
 
 table.mgmt-table th,
 table.mgmt-table td {
-    border: 1px solid var(--border);
-    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--border-subtle);
+    padding: 0.35rem 0.5rem;
     vertical-align: top;
 }
 
@@ -462,14 +773,16 @@ table.mgmt-table tr:nth-child(even) {
 }
 
 button.mgmt-btn {
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    padding: 0.12rem 0.38rem;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    padding: 0.28rem 0.55rem;
     margin: 0;
     border: 1px solid var(--btn-outline);
+    border-radius: var(--radius-sm);
     background: var(--btn-bg);
     color: var(--text);
     cursor: pointer;
+    min-height: 2rem;
 }
 
 button.mgmt-btn:hover {
@@ -515,7 +828,7 @@ button.mgmt-btn.sc-kill:hover {
     align-items: center;
     gap: 0.35rem 0.5rem;
     margin: 0 0 0.35rem;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .mgmt-scan-input {
@@ -533,7 +846,7 @@ button.mgmt-btn.sc-kill:hover {
 }
 
 .mgmt-form-row {
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     margin: 0.22rem 0;
     display: flex;
     flex-wrap: wrap;
@@ -554,7 +867,7 @@ button.mgmt-btn.sc-kill:hover {
     padding: 0.45rem 0.65rem 0.55rem;
     margin: 0.35rem 0;
     border-radius: 4px;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .mgmt-legend {
@@ -588,6 +901,106 @@ button.mgmt-btn.sc-kill:hover {
     line-height: 1.4;
 }
 
+[data-ddns-field].mgmt-ddns-row-pending {
+    opacity: 0.72;
+    transition: opacity 0.15s ease;
+}
+
+[data-ddns-field].mgmt-ddns-row-saved {
+    outline: 1px solid color-mix(in srgb, var(--text, #333) 28%, transparent);
+    outline-offset: 2px;
+    border-radius: 2px;
+    transition: outline-color 0.2s ease;
+}
+
+[data-ddns-field].mgmt-ddns-row-error {
+    outline: 1px solid color-mix(in srgb, #c00 45%, var(--border, #999));
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+.mgmt-ddns-status-strip {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--panel, #fff) 96%, var(--border) 4%);
+}
+
+.mgmt-ddns-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.65rem 1rem;
+    align-items: start;
+}
+
+.mgmt-ddns-status-span2 {
+    grid-column: 1 / -1;
+}
+
+.mgmt-ddns-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.mgmt-ddns-status-k {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.72;
+}
+
+.mgmt-ddns-status-v {
+    font-size: 0.92rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.mgmt-ddns-badge {
+    display: inline-block;
+    width: fit-content;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.mgmt-ddns-badge-neutral {
+    background: color-mix(in srgb, var(--text, #333) 10%, transparent);
+}
+
+.mgmt-ddns-badge-paused {
+    background: color-mix(in srgb, #a60 22%, transparent);
+}
+
+.mgmt-ddns-badge-active {
+    background: color-mix(in srgb, #080 22%, transparent);
+}
+
+.mgmt-ddns-badge-warn {
+    background: color-mix(in srgb, #c00 18%, transparent);
+}
+
+.mgmt-ddns-status-blurb {
+    margin: 0.65rem 0 0.5rem;
+}
+
+.mgmt-ddns-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.mgmt-ddns-status-actions a.mgmt-btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .mgmt-form-row input[type="text"],
 .mgmt-form-row input[type="number"],
 .mgmt-form-row input[type="password"],
@@ -602,15 +1015,9 @@ button.mgmt-btn.sc-kill:hover {
 
 .mgmt-note {
     color: var(--muted);
-    font-size: 0.78rem;
-    font-family: system-ui, sans-serif;
-}
-
-.mgmt-h3 {
-    font-size: 0.92rem;
-    font-weight: normal;
-    margin: 0.45rem 0 0.2rem;
-    font-family: system-ui, sans-serif;
+    font-size: 0.8125rem;
+    font-family: var(--font-sans);
+    line-height: 1.45;
 }
 
 table.mgmt-network-meta th[scope="row"] {
@@ -662,7 +1069,7 @@ code.mgmt-dns-probe-ghost {
 }
 
 .mgmt-dns-footnote {
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.72rem;
     line-height: 1.35;
     color: var(--muted);
@@ -680,7 +1087,7 @@ code.mgmt-dns-probe-ghost {
 /* DNS table: one titled block per apex (Apex + catch-all rows) */
 tr.mgmt-dns-section-head .mgmt-dns-section-title-cell {
     background: var(--thead);
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.88rem;
     font-weight: 600;
     text-align: left;
@@ -700,7 +1107,7 @@ tbody tr.mgmt-dns-section-head:not(:first-of-type) .mgmt-dns-section-title-cell 
 
 .mgmt-label {
     display: block;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.9rem;
     margin: 0.5rem 0 0.25rem;
 }
@@ -708,7 +1115,7 @@ tbody tr.mgmt-dns-section-head:not(:first-of-type) .mgmt-dns-section-title-cell 
 .mgmt-textarea {
     width: 100%;
     max-width: 40rem;
-    font: 0.9rem/1.35 system-ui, sans-serif;
+    font: 0.9rem/1.35 var(--font-sans);
     padding: 0.4rem 0.5rem;
     border: 1px solid var(--border);
     background: var(--panel);
@@ -728,7 +1135,7 @@ rp-scan-panel[hidden] {
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.9rem;
 }
 
@@ -777,7 +1184,7 @@ rp-scan-panel[hidden] {
 .mgmt-badge {
     display: inline-block;
     font-size: 0.72rem;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     padding: 0.1em 0.45em;
     border: 1px solid var(--border);
     border-radius: 2px;
@@ -827,7 +1234,7 @@ code.mgmt-badge.mgmt-badge-primary {
 
 /* Help modal content (light DOM inside rp-mgmt-modal) */
 .mgmt-help {
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.8rem;
     line-height: 1.4;
 }
@@ -842,7 +1249,7 @@ code.mgmt-badge.mgmt-badge-primary {
     font-size: 0.82rem;
     font-weight: 600;
     margin: 0 0 0.25rem;
-    font-family: system-ui, sans-serif;
+    font-family: var(--font-sans);
 }
 
 .mgmt-help-p {
@@ -878,4 +1285,70 @@ button.mgmt-inline-help {
 
 button.mgmt-inline-help:hover {
     text-decoration: none;
+}
+
+/* Standalone login page (login.html) */
+body.mgmt-login-page .mgmt-login-wrap {
+    max-width: 28rem;
+    margin: 0 auto;
+}
+
+body.mgmt-login-page .mgmt-login-field {
+    margin: 0.35rem 0 0.65rem;
+    font-family: var(--font-sans);
+}
+
+body.mgmt-login-page .mgmt-login-field .mgmt-label {
+    margin-top: 0;
+}
+
+body.mgmt-login-page .mgmt-login-field input[type="text"],
+body.mgmt-login-page .mgmt-login-field input[type="email"],
+body.mgmt-login-page .mgmt-login-field input[type="password"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+}
+
+body.mgmt-login-page .mgmt-login-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    align-items: center;
+}
+
+body.mgmt-login-page .mgmt-login-msg {
+    font-size: 0.85rem;
+    min-height: 1.2em;
+    font-family: var(--font-sans);
+    margin: 0.65rem 0 0;
+}
+
+body.mgmt-login-page .mgmt-login-msg:not(:empty) {
+    color: var(--btn-edit-text);
+}
+
+body.mgmt-login-page .mgmt-login-divider {
+    margin: 1rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--divider);
+}
+
+body.mgmt-login-page .mgmt-login-divider > .mgmt-p:first-child {
+    margin-top: 0;
+}
+
+body.mgmt-login-page .mgmt-login-footnote {
+    margin-bottom: 0;
+}
+
+body.mgmt-login-page button.mgmt-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
 }

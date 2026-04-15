@@ -4,25 +4,21 @@ import { DatabaseSync } from "node:sqlite";
 
 /**
  * SRP: SQLite-backed route persistence (node:sqlite).
- * Encapsulated: schema init, legacy JSON migration, meta for manual overrides.
+ * Encapsulated: schema init, meta for manual overrides.
  */
 export class SqlitePersistence {
     #db;
-    #legacyJsonPath;
 
     /**
      * @param {string} dbPath - Path to SQLite file
-     * @param {{ legacyRouteCacheFile?: string }} [options]
      */
-    constructor(dbPath, options = {}) {
-        this.#legacyJsonPath = options.legacyRouteCacheFile || null;
+    constructor(dbPath) {
         const dir = path.dirname(dbPath);
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
         this.#db = new DatabaseSync(dbPath);
         this.#ensureSchema();
-        this.#migrateFromLegacyJsonIfNeeded();
     }
 
     /** @returns {import("node:sqlite").DatabaseSync} */
@@ -86,6 +82,78 @@ export class SqlitePersistence {
 
     clearDdnsSettings() {
         this.#db.prepare(`DELETE FROM meta WHERE key = 'ddns'`).run();
+        this.#db.prepare(`DELETE FROM meta WHERE key = 'ddns_last_run'`).run();
+    }
+
+    /**
+     * Last DDNS sync telemetry (`meta.ddns_last_run`), separate from secrets in `meta.ddns`.
+     * @returns {{ at: string, outcome: string, detail: string, skippedBecause: string | null } | null}
+     */
+    getDdnsLastRun() {
+        const row = this.#db.prepare(`SELECT value FROM meta WHERE key = 'ddns_last_run'`).get();
+        if (!row?.value) return null;
+        try {
+            const parsed = JSON.parse(row.value);
+            if (!parsed || typeof parsed !== "object") return null;
+            const at = typeof parsed.at === "string" ? parsed.at : null;
+            const outcome = typeof parsed.outcome === "string" ? parsed.outcome : null;
+            const detail = typeof parsed.detail === "string" ? parsed.detail : "";
+            if (!at || !outcome) return null;
+            if (!["success", "skipped", "failed"].includes(outcome)) return null;
+            const skippedBecause =
+                parsed.skippedBecause === null || parsed.skippedBecause === undefined
+                    ? null
+                    : String(parsed.skippedBecause);
+            return { at, outcome, detail, skippedBecause };
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * @param {{ at: string, outcome: string, detail: string, skippedBecause: string | null }} record
+     */
+    saveDdnsLastRun(record) {
+        const detail = String(record.detail ?? "").slice(0, 512);
+        const payload = {
+            at: record.at,
+            outcome: record.outcome,
+            detail,
+            skippedBecause: record.skippedBecause ?? null
+        };
+        this.#db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('ddns_last_run', ?)`).run(JSON.stringify(payload));
+    }
+
+    /**
+     * Sparse overrides for `process.env`-backed server settings (see `src/config/serverSettingsRegistry.mjs`).
+     * @returns {Record<string, unknown>}
+     */
+    getServerSettings() {
+        const row = this.#db.prepare(`SELECT value FROM meta WHERE key = 'server_settings'`).get();
+        if (!row?.value) return {};
+        try {
+            const parsed = JSON.parse(row.value);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+
+    /**
+     * Merge partial settings; use `null` to remove a key (revert to `.env` on next apply).
+     * @param {Record<string, unknown>} partial
+     */
+    saveServerSettingsPartial(partial) {
+        const cur = this.getServerSettings();
+        const next = { ...cur };
+        for (const [k, v] of Object.entries(partial)) {
+            if (v === null) {
+                delete next[k];
+            } else {
+                next[k] = v;
+            }
+        }
+        this.#db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('server_settings', ?)`).run(JSON.stringify(next));
     }
 
     /**
@@ -169,71 +237,5 @@ export class SqlitePersistence {
             /* ignore */
         }
         return null;
-    }
-
-    #migrateFromLegacyJsonIfNeeded() {
-        const migrated = this.#db.prepare(`SELECT value FROM meta WHERE key = 'migrated_from_json'`).get();
-        if (migrated?.value === "1") return;
-
-        const legacyPath = this.#legacyJsonPath;
-        if (!legacyPath || !fs.existsSync(legacyPath)) {
-            this.#db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('migrated_from_json', '1')`).run();
-            return;
-        }
-
-        try {
-            const raw = fs.readFileSync(legacyPath, "utf-8");
-            const parsed = JSON.parse(raw);
-            let routes = [];
-            let manualOverrides = {};
-
-            if (Array.isArray(parsed)) {
-                routes = parsed;
-            } else if (parsed && typeof parsed === "object") {
-                manualOverrides = parsed.manualOverrides || {};
-                routes = Array.isArray(parsed.routes) ? parsed.routes : [];
-            }
-
-            const migratedRoutes = routes.map(route => {
-                if (route.target && !route.targets) {
-                    return {
-                        ...route,
-                        targets: [{ url: route.target, healthy: true }],
-                        options: route.options || {}
-                    };
-                }
-                return route;
-            });
-
-            this.#db.exec("BEGIN IMMEDIATE");
-            try {
-                for (const route of migratedRoutes) {
-                    if (!route.host) continue;
-                    this.#db
-                        .prepare(
-                            `INSERT OR REPLACE INTO routes (host, targets_json, options_json, manual) VALUES (?, ?, ?, 0)`
-                        )
-                        .run(route.host, JSON.stringify(route.targets), JSON.stringify(route.options || {}));
-                }
-                if (Object.keys(manualOverrides).length > 0) {
-                    this.#db
-                        .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('manual_overrides', ?)`)
-                        .run(JSON.stringify(manualOverrides));
-                }
-                this.#db
-                    .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('migrated_from_json', '1')`)
-                    .run();
-                this.#db.exec("COMMIT");
-            } catch (e) {
-                try {
-                    this.#db.exec("ROLLBACK");
-                } catch {
-                    /* ignore */
-                }
-                throw e;
-            }
-        } catch (err) {
-            console.error(`SQLite legacy migration failed: ${err.message}`);
-        }
     }
 }

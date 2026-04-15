@@ -5,3 +5,4 @@ route-cache.json
 route-cache.json.tmp
 *.log
 *.db
+management-auth/

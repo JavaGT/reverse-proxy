@@ -4,8 +4,10 @@
     "packages/*"
   ],
   "dependencies": {
+    "@javagt/express-easy-auth": "^2.0.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
+    "is-loopback-addr": "^2.0.2",
     "pino": "^10.3.1"
   },
   "name": "reverse-proxy",
@@ -14,7 +16,8 @@
   "main": "server.mjs",
   "scripts": {
     "test": "node --test tests/unit/*.mjs tests/integration/*.mjs packages/reverse-proxy-client/tests/*.mjs",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "setup:env": "node scripts/setup-env.mjs"
   },
   "keywords": [],
   "author": "",
@@ -24,7 +27,6 @@
     "node": ">=22.5.0"
   },
   "devDependencies": {
-    "knip": "^6.3.0",
     "pino-pretty": "^13.1.3"
   }
 }

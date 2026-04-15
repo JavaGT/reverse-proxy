@@ -2,12 +2,40 @@ import { getFetch } from "./fetch.mjs";
 import { ManagementApiError } from "./errors.mjs";
 
 /**
- * @param {{ baseUrl: string, token?: string | null, fetch?: typeof fetch }} options
+ * @param {unknown} json
+ */
+function parseManagementError(json) {
+    const err = json?.error;
+    if (typeof err === "string") {
+        return {
+            code: "HTTP_ERROR",
+            message: err,
+            details: null,
+            resolution: null
+        };
+    }
+    if (err && typeof err === "object") {
+        return {
+            code: typeof err.code === "string" ? err.code : "HTTP_ERROR",
+            message: typeof err.message === "string" ? err.message : "Request failed",
+            details: err.details ?? null,
+            resolution: typeof err.resolution === "string" ? err.resolution : null
+        };
+    }
+    return {
+        code: "HTTP_ERROR",
+        message: "Request failed",
+        details: null,
+        resolution: null
+    };
+}
+
+/**
+ * @param {{ baseUrl: string, fetch?: typeof fetch }} options
  */
 export function createHttpClient(options) {
     const base = String(options.baseUrl).replace(/\/$/, "");
     const fetchFn = options.fetch ?? getFetch();
-    const token = options.token != null && String(options.token).trim() !== "" ? String(options.token).trim() : null;
 
     /** @param {string} path */
     async function request(path, init = {}) {
@@ -17,9 +45,6 @@ export function createHttpClient(options) {
         };
         if (init.body != null && !headers["Content-Type"]) {
             headers["Content-Type"] = "application/json";
-        }
-        if (token) {
-            headers.Authorization = `Bearer ${token}`;
         }
         const res = await fetchFn(`${base}${path}`, { ...init, headers });
         const text = await res.text();
@@ -32,14 +57,8 @@ export function createHttpClient(options) {
             }
         }
         if (!res.ok) {
-            const err = json?.error;
-            throw new ManagementApiError(
-                res.status,
-                err?.code ?? "HTTP_ERROR",
-                err?.message ?? res.statusText ?? "Request failed",
-                err?.details ?? null,
-                err?.resolution ?? null
-            );
+            const { code, message, details, resolution } = parseManagementError(json);
+            throw new ManagementApiError(res.status, code, message, details, resolution);
         }
         return json;
     }
@@ -69,6 +88,7 @@ export function createHttpClient(options) {
         getDdns: () => request("/api/v1/ddns"),
         /** @param {Record<string, unknown>} body */
         putDdns: body => request("/api/v1/ddns", { method: "PUT", body: JSON.stringify(body) }),
-        deleteDdns: () => request("/api/v1/ddns", { method: "DELETE" })
+        deleteDdns: () => request("/api/v1/ddns", { method: "DELETE" }),
+        postDdnsSync: () => request("/api/v1/ddns/sync", { method: "POST" })
     };
 }

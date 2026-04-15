@@ -22,8 +22,31 @@ const mockPersistence = {
     load: async () => ({ routes: [], manualOverrides: {}, rootDomainConfig: null }),
     getDdnsSettings: () => null,
     saveDdnsSettings() {},
-    clearDdnsSettings() {}
+    clearDdnsSettings() {},
+    getDdnsLastRun: () => null,
+    saveDdnsLastRun() {},
+    getServerSettings: () => ({}),
+    saveServerSettingsPartial() {}
 };
+
+process.env.MANAGEMENT_AUTH_DATA_DIR = path.join(os.tmpdir(), `rp-mgmt-auth-int-${process.pid}`);
+process.env.MANAGEMENT_AUTO_PUBLIC_EGRESS_IP = "0";
+
+function firstNonLoopbackIpv4() {
+    for (const infos of Object.values(os.networkInterfaces())) {
+        for (const info of infos || []) {
+            if (
+                info.family === "IPv4" &&
+                info.internal === false &&
+                typeof info.address === "string" &&
+                !info.address.startsWith("127.")
+            ) {
+                return info.address;
+            }
+        }
+    }
+    return null;
+}
 
 test("ManagementServer should serve /llms.txt with instructions", async (t) => {
     // 1. Setup
@@ -52,10 +75,10 @@ test("ManagementServer should serve /llms.txt with instructions", async (t) => {
     }
 });
 
-test("ManagementServer should inject MANAGEMENT_SECRET guidance into /llms.txt when secret is configured", async (t) => {
+test("ManagementServer /llms.txt documents express-easy-auth for mutating routes", async () => {
     const registry = new RouteRegistry("example.com");
-    const controller = new ManagementController(registry, mockPersistence, mockLogger, "test-secret-value");
-    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger, "test-secret-value");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
 
     try {
         const port = await server.start();
@@ -63,8 +86,8 @@ test("ManagementServer should inject MANAGEMENT_SECRET guidance into /llms.txt w
         const text = await response.text();
 
         assert.strictEqual(response.status, 200);
-        assert.ok(text.includes("MANAGEMENT_SECRET"), "Should mention MANAGEMENT_SECRET");
-        assert.ok(text.includes("Authorization: Bearer"), "Should describe bearer auth");
+        assert.ok(text.includes("@javagt/express-easy-auth"), "Should mention express-easy-auth");
+        assert.ok(text.includes("/api/v1/auth"), "Should point at auth routes");
     } finally {
         await server.stop();
     }
@@ -87,6 +110,9 @@ test("ManagementServer should serve OpenAPI YAML", async () => {
         const v1 = await fetch(`http://127.0.0.1:${port}/api/v1/openapi.yaml`).then(r => r.text());
         assert.ok(v1.includes("/api/v1/scan"));
         assert.ok(v1.includes("/api/v1/ddns"));
+        assert.ok(v1.includes("/api/v1/ddns/sync"));
+        assert.ok(v1.includes("/api/v1/accounts"));
+        assert.ok(v1.includes("/api/v1/settings"));
     } finally {
         await server.stop();
     }
@@ -103,7 +129,95 @@ test("ManagementServer should serve ddns.html management page", async () => {
         const text = await response.text();
         assert.strictEqual(response.status, 200);
         assert.ok(text.includes("rp-ddns-panel"), "Should include DDNS custom element");
-        assert.ok(text.includes('href="index.html#network"'), "Should link back to main UI for Network");
+        assert.ok(text.includes("rp-mgmt-header"), "Should include app chrome web component (nav links render client-side)");
+    } finally {
+        await server.stop();
+    }
+});
+
+test("GET /api/v1/settings returns settings envelope", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/settings`, {
+            headers: { Accept: "application/json" }
+        });
+        assert.strictEqual(res.status, 200);
+        const j = await res.json();
+        assert.ok(j.data?.settings && typeof j.data.settings === "object");
+        assert.ok(Array.isArray(j.data?.bootstrapEnvKeys));
+    } finally {
+        await server.stop();
+    }
+});
+
+test("ManagementServer should serve settings.html page", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const response = await fetch(`http://127.0.0.1:${port}/settings.html`);
+        const text = await response.text();
+        assert.strictEqual(response.status, 200);
+        assert.ok(text.includes("mgmt-app.mjs"));
+        assert.ok(text.includes("rp-settings-app"));
+    } finally {
+        await server.stop();
+    }
+});
+
+test("ManagementServer should serve accounts.html management page", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const response = await fetch(`http://127.0.0.1:${port}/accounts.html`);
+        const text = await response.text();
+        assert.strictEqual(response.status, 200);
+        assert.ok(text.includes("mgmt-app.mjs"), "Should load management app bundle");
+        assert.ok(text.includes("rp-accounts-app"), "Should mount accounts web component");
+    } finally {
+        await server.stop();
+    }
+});
+
+test("GET /api/v1/accounts on localhost returns account list envelope", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/accounts`, {
+            headers: { Accept: "application/json" }
+        });
+        assert.strictEqual(res.status, 200);
+        const j = await res.json();
+        assert.ok(Array.isArray(j.data?.accounts), "data.accounts should be an array");
+    } finally {
+        await server.stop();
+    }
+});
+
+test("DELETE /api/v1/accounts/:id returns 404 for unknown user", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/accounts/00000000-0000-4000-8000-000000000000`, {
+            method: "DELETE",
+            headers: { Accept: "application/json" }
+        });
+        assert.strictEqual(res.status, 404);
     } finally {
         await server.stop();
     }
@@ -220,6 +334,7 @@ test("GET /api/v1/ddns returns read-only Porkbun summary from SQLite row (no API
         assert.strictEqual(json.data.schedulerState, "running");
         assert.strictEqual(json.data.schedulerWouldRun, true);
         assert.strictEqual(json.data.cachedPublicIp, null);
+        assert.strictEqual(json.data.lastRun, null);
         assert.strictEqual(json.data.configSource, "sqlite");
         assert.strictEqual(json.data.configInvalid, false);
         assert.ok(Array.isArray(json.data.ipv4Services));
@@ -280,7 +395,7 @@ test("GET /api/v1/network returns local addresses and DNS rows", async () => {
     }
 });
 
-test("PUT /api/v1/domains updates apex list (auth + localhost)", async () => {
+test("PUT /api/v1/domains updates apex list on loopback without session", async () => {
     const registry = new RouteRegistry("old.test");
     let lastDomainConfig = null;
     const persistence = {
@@ -294,23 +409,76 @@ test("PUT /api/v1/domains updates apex list (auth + localhost)", async () => {
         saveDdnsSettings() {},
         clearDdnsSettings() {}
     };
-    const controller = new ManagementController(registry, persistence, mockLogger, "secret", {});
-    const server = new ManagementServer("mgmt", "old.test", controller, mockLogger, "secret");
+    const controller = new ManagementController(registry, persistence, mockLogger);
+    const server = new ManagementServer("mgmt", "old.test", controller, mockLogger);
 
     try {
         const port = await server.start();
         const url = `http://127.0.0.1:${port}/api/v1/domains`;
-        const body = JSON.stringify({ apexDomains: ["new.test", "extra.test"] });
+        const body = JSON.stringify({ apexDomains: ["solo.test"] });
         const res = await fetch(url, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", Authorization: "Bearer secret" },
+            headers: { "Content-Type": "application/json" },
             body
         });
         const json = await res.json();
         assert.strictEqual(res.status, 200);
-        assert.strictEqual(json.data.primary, "new.test");
-        assert.deepStrictEqual(json.data.apexDomains.sort(), ["extra.test", "new.test"].sort());
-        assert.deepStrictEqual(lastDomainConfig?.apexDomains?.sort(), ["extra.test", "new.test"].sort());
+        assert.strictEqual(json.data.primary, "solo.test");
+    } finally {
+        await server.stop();
+    }
+});
+
+test("PUT /api/v1/domains persists dnsConsole shape", async () => {
+    const registry = new RouteRegistry("a.example");
+    let lastDomainConfig = null;
+    const persistence = {
+        save: async () => {},
+        saveRootDomainConfig: async cfg => {
+            lastDomainConfig = cfg;
+        },
+        getRootDomainConfig: () => lastDomainConfig,
+        load: async () => ({ routes: [], manualOverrides: {}, rootDomainConfig: null }),
+        getDdnsSettings: () => null,
+        saveDdnsSettings() {},
+        clearDdnsSettings() {}
+    };
+    const controller = new ManagementController(registry, persistence, mockLogger);
+    const server = new ManagementServer("mgmt", "a.example", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const url = `http://127.0.0.1:${port}/api/v1/domains`;
+        const put = body =>
+            fetch(url, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            }).then(r => r.json().then(j => ({ status: r.status, json: j })));
+
+        const r1 = await put({
+            apexDomains: ["a.example", "b.example"],
+            dnsConsole: {
+                defaultProvider: "porkbun",
+                byApex: { "a.example": "none", "b.example": "porkbun" }
+            }
+        });
+        assert.strictEqual(r1.status, 200);
+        assert.deepStrictEqual(lastDomainConfig?.apexDomains, ["a.example", "b.example"]);
+        assert.deepStrictEqual(lastDomainConfig?.dnsConsole, {
+            defaultProvider: "porkbun",
+            byApex: { "a.example": null, "b.example": "porkbun" }
+        });
+        assert.strictEqual(r1.json.data.dnsConsole.defaultProvider, "porkbun");
+        assert.strictEqual(r1.json.data.dnsConsoleLinks.length, 1);
+        assert.strictEqual(r1.json.data.dnsConsoleLinks[0].apex, "b.example");
+
+        const r2 = await put({
+            apexDomains: ["a.example", "b.example"],
+            dnsConsole: null
+        });
+        assert.strictEqual(r2.status, 200);
+        assert.strictEqual(lastDomainConfig?.dnsConsole, null);
     } finally {
         await server.stop();
     }
@@ -396,17 +564,17 @@ test("POST /api/v1/reserve is idempotent (201 then 200)", async () => {
     }
 });
 
-test("PUT and DELETE /api/v1/ddns persist in SQLite (localhost + bearer)", async () => {
+test("PUT and DELETE /api/v1/ddns persist in SQLite on loopback", async () => {
     const dbPath = path.join(os.tmpdir(), `rp-ddns-int-${Date.now()}.db`);
     const persistence = new SqlitePersistence(dbPath);
     const registry = new RouteRegistry("myapex.test");
-    const controller = new ManagementController(registry, persistence, mockLogger, "tok");
-    const server = new ManagementServer("mgmt", "myapex.test", controller, mockLogger, "tok");
+    const controller = new ManagementController(registry, persistence, mockLogger);
+    const server = new ManagementServer("mgmt", "myapex.test", controller, mockLogger);
 
     try {
         const port = await server.start();
         const base = `http://127.0.0.1:${port}/api/v1/ddns`;
-        const headers = { "Content-Type": "application/json", Authorization: "Bearer tok" };
+        const headers = { "Content-Type": "application/json" };
 
         let r = await fetch(base, {
             method: "PUT",
@@ -427,7 +595,7 @@ test("PUT and DELETE /api/v1/ddns persist in SQLite (localhost + bearer)", async
         assert.strictEqual(j.data.domainListSource, "STORED_APEX");
         assert.deepStrictEqual(j.data.domains, ["myapex.test"]);
 
-        r = await fetch(base, { method: "DELETE", headers: { Authorization: "Bearer tok" } });
+        r = await fetch(base, { method: "DELETE" });
         assert.strictEqual(r.status, 200);
         j = await r.json();
         assert.strictEqual(j.data.configSource, "none");
@@ -442,6 +610,53 @@ test("PUT and DELETE /api/v1/ddns persist in SQLite (localhost + bearer)", async
     }
 });
 
+test("POST /api/v1/ddns/sync returns 400 when DDNS is not configured", async () => {
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const r = await fetch(`http://127.0.0.1:${port}/api/v1/ddns/sync`, { method: "POST" });
+        assert.strictEqual(r.status, 400);
+        const j = await r.json();
+        assert.strictEqual(j.error?.code, "DDNS_NOT_CONFIGURED");
+    } finally {
+        await server.stop();
+    }
+});
+
+test("POST /api/v1/ddns/sync returns 400 when DDNS is disabled in SQLite", async () => {
+    const persistence = {
+        ...mockPersistence,
+        getDdnsSettings: () => ({
+            enabled: false,
+            porkbunApiKey: "a",
+            porkbunSecretKey: "b",
+            domainMode: "apex",
+            matchNote: "m",
+            intervalMs: 30_000,
+            ipLookupTimeoutMs: 8000,
+            ipv4Services: ["https://api4.ipify.org"],
+            ipv6Services: ["https://api6.ipify.org"],
+            porkbunApiBaseUrl: "https://api.porkbun.com/api/json/v3"
+        })
+    };
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, persistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const r = await fetch(`http://127.0.0.1:${port}/api/v1/ddns/sync`, { method: "POST" });
+        assert.strictEqual(r.status, 400);
+        const j = await r.json();
+        assert.strictEqual(j.error?.code, "DDNS_SYNC_IDLE");
+    } finally {
+        await server.stop();
+    }
+});
+
 test("PUT /api/v1/ddns returns 501 when persistence has no DDNS save support", async () => {
     const persistence = {
         save: async () => {},
@@ -451,18 +666,278 @@ test("PUT /api/v1/ddns returns 501 when persistence has no DDNS save support", a
         getDdnsSettings: () => null
     };
     const registry = new RouteRegistry("x.test");
-    const controller = new ManagementController(registry, persistence, mockLogger, "tok");
-    const server = new ManagementServer("mgmt", "x.test", controller, mockLogger, "tok");
+    const controller = new ManagementController(registry, persistence, mockLogger);
+    const server = new ManagementServer("mgmt", "x.test", controller, mockLogger);
 
     try {
         const port = await server.start();
         const r = await fetch(`http://127.0.0.1:${port}/api/v1/ddns`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json", Authorization: "Bearer tok" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: false })
         });
         assert.strictEqual(r.status, 501);
     } finally {
         await server.stop();
+    }
+});
+
+test("logical non-loopback client gets 401 for gated JSON without session", async () => {
+    const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/domains`, {
+            headers: {
+                Accept: "application/json",
+                "X-Forwarded-For": "203.0.113.10"
+            }
+        });
+        assert.strictEqual(res.status, 401);
+        const json = await res.json();
+        assert.strictEqual(json.error?.code, "UNAUTHORIZED");
+        assert.ok(typeof json.error?.resolution === "string" && json.error.resolution.length > 10);
+
+        const login = await fetch(`http://127.0.0.1:${port}/login.html`, {
+            headers: { "X-Forwarded-For": "203.0.113.10", Accept: "text/html" }
+        });
+        assert.strictEqual(login.status, 200);
+        const html = await login.text();
+        assert.ok(html.includes("Sign in"), "login page should load without prior session");
+
+        const css = await fetch(`http://127.0.0.1:${port}/mgmt.css`, {
+            headers: { "X-Forwarded-For": "203.0.113.10", Accept: "text/css" }
+        });
+        assert.strictEqual(css.status, 200);
+        const body = await css.text();
+        assert.ok(body.includes("--bg:"), "mgmt.css should be served without session");
+    } finally {
+        await server.stop();
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+    }
+});
+
+test("GET /api/v1/health and /health are allowed without session (login.html local-operator probe)", async () => {
+    const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const headers = {
+            Accept: "application/json",
+            "X-Forwarded-For": "203.0.113.10"
+        };
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`, { headers });
+        assert.strictEqual(res.status, 200);
+        const json = await res.json();
+        assert.strictEqual(json.data?.status, "OK");
+        assert.notStrictEqual(res.headers.get("x-management-local-operator"), "1");
+
+        const root = await fetch(`http://127.0.0.1:${port}/health`, { headers });
+        assert.strictEqual(root.status, 200);
+    } finally {
+        await server.stop();
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+    }
+});
+
+test("forwarded client IP matching this host bypasses session gate", async t => {
+    const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    const hostIp = firstNonLoopbackIpv4();
+    if (!hostIp) {
+        t.skip("no non-loopback IPv4 on this host");
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+        return;
+    }
+
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/domains`, {
+            headers: {
+                Accept: "application/json",
+                "X-Forwarded-For": hostIp
+            }
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get("x-management-local-operator"), "1");
+
+        const logout = await fetch(`http://127.0.0.1:${port}/api/v1/auth/logout`, {
+            method: "POST",
+            headers: { "X-Forwarded-For": hostIp }
+        });
+        assert.strictEqual(logout.status, 204);
+    } finally {
+        await server.stop();
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+    }
+});
+
+test("X-Forwarded-For chain: a non-leftmost hop matching this host bypasses session gate", async t => {
+    const prevTrust = process.env.MANAGEMENT_TRUST_PROXY;
+    process.env.MANAGEMENT_TRUST_PROXY = "1";
+    const hostIp = firstNonLoopbackIpv4();
+    if (!hostIp) {
+        t.skip("no non-loopback IPv4 on this host");
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+        return;
+    }
+
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/domains`, {
+            headers: {
+                Accept: "application/json",
+                "X-Forwarded-For": `203.0.113.50, ${hostIp}`
+            }
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers.get("x-management-local-operator"), "1");
+    } finally {
+        await server.stop();
+        if (prevTrust === undefined) delete process.env.MANAGEMENT_TRUST_PROXY;
+        else process.env.MANAGEMENT_TRUST_PROXY = prevTrust;
+    }
+});
+
+test("ManagementServer stop clears public egress refresh interval", async () => {
+    const origClear = global.clearInterval;
+    let clearCount = 0;
+    global.clearInterval = function (id) {
+        clearCount++;
+        return origClear(id);
+    };
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+    try {
+        await server.start();
+        await server.stop();
+        assert.ok(clearCount >= 1, "stop() should clearInterval for the egress refresh timer");
+    } finally {
+        global.clearInterval = origClear;
+    }
+});
+
+test("GET /api/v1/registration-secret from localhost works without session (local operator)", async () => {
+    const prev = process.env.MANAGEMENT_REGISTRATION_SECRET;
+    process.env.MANAGEMENT_REGISTRATION_SECRET = "invite-from-local-test";
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/registration-secret`, {
+            headers: { Accept: "application/json" }
+        });
+        assert.strictEqual(res.status, 200);
+        const j = await res.json();
+        assert.strictEqual(j.data?.configured, true);
+        assert.strictEqual(j.data?.secret, "invite-from-local-test");
+    } finally {
+        await server.stop();
+        if (prev === undefined) delete process.env.MANAGEMENT_REGISTRATION_SECRET;
+        else process.env.MANAGEMENT_REGISTRATION_SECRET = prev;
+    }
+});
+
+test("POST /api/v1/auth/register without MANAGEMENT_REGISTRATION_SECRET returns 503", async () => {
+    const prev = process.env.MANAGEMENT_REGISTRATION_SECRET;
+    delete process.env.MANAGEMENT_REGISTRATION_SECRET;
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const res = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                username: "z",
+                email: "z@test.integration",
+                password: "password123",
+                registrationSecret: "x"
+            })
+        });
+        assert.strictEqual(res.status, 503);
+        const j = await res.json();
+        assert.strictEqual(j.error?.code, "NOT_CONFIGURED");
+    } finally {
+        await server.stop();
+        if (prev === undefined) delete process.env.MANAGEMENT_REGISTRATION_SECRET;
+        else process.env.MANAGEMENT_REGISTRATION_SECRET = prev;
+    }
+});
+
+test("POST /api/v1/auth/register requires valid registrationSecret when configured", async () => {
+    const prev = process.env.MANAGEMENT_REGISTRATION_SECRET;
+    process.env.MANAGEMENT_REGISTRATION_SECRET = "test-invite-secret-1";
+    const registry = new RouteRegistry("example.com");
+    const controller = new ManagementController(registry, mockPersistence, mockLogger);
+    const server = new ManagementServer("mgmt", "example.com", controller, mockLogger);
+
+    try {
+        const port = await server.start();
+        const bad = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                username: "a0",
+                email: "a0@test.integration",
+                password: "password123"
+            })
+        });
+        assert.strictEqual(bad.status, 403);
+
+        const bad2 = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                username: "a0b",
+                email: "a0b@test.integration",
+                password: "password123",
+                registrationSecret: "wrong"
+            })
+        });
+        assert.strictEqual(bad2.status, 403);
+
+        const u = `u${Date.now()}`;
+        const ok = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+                username: u,
+                email: `${u}@test.integration`,
+                password: "password123",
+                registrationSecret: "test-invite-secret-1"
+            })
+        });
+        assert.ok(ok.status === 201 || ok.status === 409, `unexpected ${ok.status}`);
+    } finally {
+        await server.stop();
+        if (prev === undefined) delete process.env.MANAGEMENT_REGISTRATION_SECRET;
+        else process.env.MANAGEMENT_REGISTRATION_SECRET = prev;
     }
 });

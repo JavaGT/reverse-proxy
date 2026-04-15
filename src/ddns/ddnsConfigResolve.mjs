@@ -426,27 +426,3 @@ export function mergePutDdnsBody(prev, body, isValidApexFQDN) {
         }
     };
 }
-
-/**
- * @param {NodeJS.ProcessEnv} env
- * @returns {boolean}
- */
-export function hasLegacyDdnsEnvVars(env) {
-    const keys = [
-        "DDNS_ENABLED",
-        "PORKBUN_API_KEY",
-        "PORKBUN_SECRET_KEY",
-        "API_KEY",
-        "SECRET_KEY",
-        "DDNS_DOMAINS",
-        "DDNS_MATCH_NOTE",
-        "MATCH_NOTE",
-        "DDNS_INTERVAL_MS",
-        "IP_LOOKUP_TIMEOUT_MS"
-    ];
-    for (const k of keys) {
-        const v = env[k];
-        if (v != null && String(v).trim() !== "") return true;
-    }
-    return false;
-}

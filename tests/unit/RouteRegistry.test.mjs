@@ -52,14 +52,17 @@ test("RouteRegistry should return null if no healthy targets", () => {
     assert.strictEqual(registry.getTarget("app.example.com"), null);
 });
 
-test("RouteRegistry should support legacy hydration format", () => {
+test("RouteRegistry hydrate skips rows without non-empty targets", () => {
     const registry = new RouteRegistry("example.com");
     registry.hydrate([
-        { host: "legacy.example.com", target: "http://localhost:5000" }
+        { host: "a.example.com", targets: [{ url: "http://localhost:5000", healthy: true }] },
+        { host: "skip.example.com", targets: [] },
+        { host: "also-skip.example.com" }
     ]);
-    
-    const route = registry.getRoute("legacy.example.com");
-    assert.strictEqual(route.targets[0].url, "http://localhost:5000");
+
+    assert.ok(registry.getRoute("a.example.com"));
+    assert.strictEqual(registry.getRoute("skip.example.com"), undefined);
+    assert.strictEqual(registry.getRoute("also-skip.example.com"), undefined);
 });
 
 test("RouteRegistry should release all counters on release", () => {

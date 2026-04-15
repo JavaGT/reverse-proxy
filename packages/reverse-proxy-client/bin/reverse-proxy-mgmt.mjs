@@ -19,8 +19,6 @@ function parseArgs(argv) {
             flags.json = true;
         } else if (a === "--url") {
             flags.url = args[++i];
-        } else if (a === "--token") {
-            flags.token = args[++i];
         } else if (a === "--db") {
             flags.db = args[++i];
         } else if (a === "--mode") {
@@ -51,7 +49,6 @@ Usage:
 
 Options:
   --url <url>           Management base URL (default http://127.0.0.1:24789)
-  --token <secret>      MANAGEMENT_SECRET bearer (env MANAGEMENT_SECRET)
   --db <path>           SQLite path (default env SQLITE_DB_PATH or ./reverse-proxy.db)
   --mode auto|http|db   Transport (default auto: probe /api/v1/health, else SQLite)
   --json                Print JSON only (no hints)
@@ -68,6 +65,7 @@ Commands:
   kill <port>           HTTP only
   ddns get
   ddns set             Requires --file <body.json> (same fields as PUT /api/v1/ddns)
+  ddns sync            HTTP only — POST /api/v1/ddns/sync
   ddns clear
 
 Database writes: stop the reverse-proxy process before using db mode for reserve/release/domains set/ddns set|clear.
@@ -82,9 +80,7 @@ async function main() {
     }
 
     const baseUrl = flags.url ?? process.env.MANAGEMENT_URL ?? "http://127.0.0.1:24789";
-    const token = flags.token ?? process.env.MANAGEMENT_SECRET ?? null;
     const dbPath = flags.db ?? process.env.SQLITE_DB_PATH ?? "./reverse-proxy.db";
-    const legacyRouteCacheFile = process.env.ROUTE_CACHE_FILE ?? undefined;
     const mode = (flags.mode ?? "auto").toLowerCase();
 
     if (!["auto", "http", "db"].includes(mode)) {
@@ -94,14 +90,14 @@ async function main() {
 
     let client;
     if (mode === "http") {
-        client = createHttpClient({ baseUrl, token });
+        client = createHttpClient({ baseUrl });
     } else if (mode === "db") {
-        client = createDbClient({ dbPath, legacyRouteCacheFile });
+        client = createDbClient({ dbPath });
         if (!flags.json) {
             console.error("Note: database mode — stop the proxy before mutating routes or domains.");
         }
     } else {
-        client = createAutoClient({ baseUrl, token, dbPath, legacyRouteCacheFile });
+        client = createAutoClient({ baseUrl, dbPath });
     }
 
     const cmd = positional.join(" ");
@@ -213,6 +209,15 @@ async function main() {
             }
             const body = JSON.parse(readFileSync(flags.file, "utf-8"));
             out(await client.putDdns(body));
+            return;
+        }
+
+        if (cmd === "ddns sync") {
+            if (mode === "db") {
+                console.error("ddns sync requires HTTP management server");
+                process.exit(2);
+            }
+            out(await client.postDdnsSync());
             return;
         }
 

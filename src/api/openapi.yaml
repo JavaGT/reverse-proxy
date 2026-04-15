@@ -3,7 +3,7 @@ info:
   title: Reverse proxy management API
   version: "1.0"
   description: |
-    Local-only control plane (binds to 127.0.0.1). Authenticate with `Authorization: Bearer <secret>` when `MANAGEMENT_SECRET` is set in the server environment.
+    Local-only control plane (binds to 127.0.0.1). **`@javagt/express-easy-auth`** at `/api/v1/auth` provides sessions (password, TOTP, passkeys). **Remote** clients must be signed in (session cookie `mgmt.sid`), including for static UI and read-only JSON routes; use **`GET /login.html`** in a browser or `POST /api/v1/auth/login` with a cookie-aware HTTP client. **Same-machine** clients need no credentials: logical loopback (127.0.0.0/8 or `::1`), trusted `X-Forwarded-For` loopback when `MANAGEMENT_TRUST_PROXY` is enabled, or a trusted forwarded IP that matches an address on this host (e.g. opening the public management hostname from the server through a local reverse proxy).
 
     **Errors:** All JSON error responses use:
     `{ "error": { "code": string, "message": string, "details": object | array | null, "resolution"?: string } }`.
@@ -13,13 +13,22 @@ info:
 
     **Health checks:** When `options.healthPath` is set, the proxy GETs that path on each upstream periodically (`HEALTH_CHECK_INTERVAL_MS`) using native `fetch` (http/https). Success is HTTP status 200–399; redirects are not followed; timeout is 5 seconds. Failed probes mark that upstream unhealthy; the route stays registered. The data plane returns 503 when no healthy upstreams remain for the host. Omit `healthPath` to disable monitoring for that route. Each target in `GET /routes` may include `healthCheckedAt` (ISO 8601) after the first probe.
 
-    **Persistence:** Routes are stored in SQLite (`SQLITE_DB_PATH`). **Multi-apex:** apex list may be set in SQLite via `PUT /api/v1/domains` (overrides `ROOT_DOMAINS` env when present). Otherwise use `ROOT_DOMAINS` (comma-separated). **`baseDomain` is always required** on `POST /api/v1/reserve` (each item in a batch) and as a **query parameter** on `DELETE /api/v1/reserve/{subdomain}` so reservations are explicit. **Batch:** send `{ "reservations": [ { "subdomain", "baseDomain", "port" | "ports" | … }, … ] }` to create several mappings in one request (possibly different apexes).
+    **Persistence:** Routes are stored in SQLite (`SQLITE_DB_PATH`). **Multi-apex:** apex list may be set in SQLite via `PUT /api/v1/domains` (overrides `ROOT_DOMAINS` env when present). Otherwise use `ROOT_DOMAINS` (comma-separated). **`baseDomain` is always required** on `POST /api/v1/reserve` (each item in a batch) and as a **query parameter** on `DELETE /api/v1/reserve/{subdomain}` so reservations are explicit. **Batch:** send `{ "reservations": [ { "subdomain", "baseDomain", "port" | "ports" | "targets" }, … ] }` to create several mappings in one request (possibly different apexes).
 
-    **Official Node client:** npm package **`@javagt/reverse-proxy-client`** — `createHttpClient({ baseUrl, token })` for this API, optional `createDbClient` / `createAutoClient` against the same SQLite file, CLI **`reverse-proxy-mgmt`**, and `ManagementApiError` for JSON errors. See `GET /llms.txt` and `packages/reverse-proxy-client/README.md` in the server repository.
+    **Official Node client:** npm package **`@javagt/reverse-proxy-client`** — `createHttpClient({ baseUrl })` for this API (same-machine or callers that reuse a session cookie), optional `createDbClient` / `createAutoClient` against the same SQLite file, CLI **`reverse-proxy-mgmt`**, and `ManagementApiError` for JSON errors. See `GET /llms.txt` and `packages/reverse-proxy-client/README.md` in the server repository.
+
+    **Account registration:** Configure **`MANAGEMENT_REGISTRATION_SECRET`** in **`GET /api/v1/settings`** / **`PUT /api/v1/settings`** (SQLite `meta.server_settings`) or in `.env`. `POST /api/v1/auth/register` requires JSON field **`registrationSecret`** matching that value. **`GET /api/v1/registration-secret`** returns the secret when configured. The **Accounts** page (**`/accounts.html`**) lists users and shows the invite secret (masked) with copy. **`GET /api/v1/accounts`** lists accounts; **`DELETE /api/v1/accounts/{userId}`** removes a user (not yourself; not the last account).
+
+    **Server settings:** Most tunables (TLS path, management port, auth/WebAuthn fallbacks, rate limits, registration/session secrets, network probe timeouts, etc.) live in SQLite **`meta.server_settings`** and override `.env` on startup and after **`PUT /api/v1/settings`**. Bootstrap **`SQLITE_DB_PATH`** (and usually **`TLS_CERT_DIR`** for first boot) remain in `.env` only. Use **`GET /settings.html`** or **`GET /api/v1/settings`**; **`PUT /api/v1/settings`** requires **localhost TCP** (same as **`PUT /ddns`**) plus a session when not same-machine.
+
+    **Porkbun-related configuration (three SQLite/env layers):** (1) **DDNS** (automated A/AAAA updates) — stored in **`meta.ddns`**, edited via **`PUT /api/v1/ddns`** or **`/ddns.html`**. (2) **DNS management console links** (open registrar UI per apex) — stored in **`meta.root_domains`** as optional **`dnsConsole`** (`defaultProvider`, **`byApex`**), edited via **`PUT /api/v1/domains`** or the Domains panel. Link resolution order is: **`byApex[apex]`** → **`dnsConsole.defaultProvider`** → **`DNS_CONSOLE_DEFAULT_PROVIDER`** (from **`meta.server_settings`** key **`dnsConsoleDefaultProvider`** or `.env`). (3) **Global fallback only** — **`dnsConsoleDefaultProvider`** in **`meta.server_settings`** when **`dnsConsole`** omits a default or is null. Implementations: DDNS uses the Porkbun JSON API; console links use **`src/infrastructure/dns/console/`** (currently Porkbun only).
 
 servers:
   - url: http://127.0.0.1:{port}
     description: Management API (localhost only; default port 24789 from MANAGEMENT_INTERFACE_PORT)
+
+security:
+  - sessionCookie: []
 
 paths:
   /api/v1/health:
@@ -40,6 +49,12 @@ paths:
                       status:
                         type: string
                         example: OK
+        "401":
+          description: Invalid or missing session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/status:
     get:
       summary: Alias of /api/v1/health
@@ -58,9 +73,228 @@ paths:
                       status:
                         type: string
                         example: OK
+        "401":
+          description: Invalid or missing session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/registration-secret:
+    get:
+      summary: Shared registration secret (same-machine or session)
+      description: |
+        Returns `MANAGEMENT_REGISTRATION_SECRET` when configured (`data.configured` true and `data.secret`). Same auth as other management routes: **same-machine** requests are allowed without a session; **remote** clients need a valid session cookie. Use the value as `registrationSecret` in `POST /api/v1/auth/register`.
+      operationId: getRegistrationSecret
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Whether registration is configured and the secret string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      configured:
+                        type: boolean
+                      secret:
+                        type: string
+                        nullable: true
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/accounts:
+    get:
+      summary: List management accounts (express-easy-auth users)
+      description: |
+        Returns non-sensitive fields for each user (`id`, `username`, `email`, 2FA flags, passkey count, timestamps). Same auth as other management JSON (same-machine or session).
+      operationId: listAccounts
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Account rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accounts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            username:
+                              type: string
+                            email:
+                              type: string
+                            totpEnabled:
+                              type: boolean
+                            mfaRequired:
+                              type: boolean
+                            passkeyCount:
+                              type: integer
+                            createdAt:
+                              type: integer
+                              description: Unix timestamp (ms)
+                            updatedAt:
+                              type: integer
+                              description: Unix timestamp (ms)
+        "401":
+          description: Unauthorized for remote clients without session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/accounts/{userId}:
+    delete:
+      summary: Remove a management account
+      description: |
+        Deletes the user and related auth data (sessions, passkeys, etc.). Cannot delete your own account while signed in, or the last remaining account.
+      operationId: deleteAccount
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized for remote clients without session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Unknown user id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cannot delete own account or last account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/settings:
+    get:
+      summary: Effective server settings (SQLite overrides + .env)
+      description: |
+        Returns merged settings (camelCase) and which secrets are configured. Does not return secret values.
+        `bootstrapEnvKeys` lists variables that must stay in `.env` (not stored in SQLite).
+      operationId: getServerSettings
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Settings envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      settings:
+                        type: object
+                        additionalProperties: true
+                      secretsConfigured:
+                        type: object
+                        properties:
+                          registrationSecret:
+                            type: boolean
+                          sessionSecret:
+                            type: boolean
+                      bootstrapEnvKeys:
+                        type: array
+                        items:
+                          type: string
+        "401":
+          description: Unauthorized for remote clients without session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: SQLite persistence not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Update server settings in SQLite
+      description: |
+        Partial JSON body (camelCase keys). Use `null` for a key to remove the SQLite override and fall back to `.env`.
+        Secrets (`managementRegistrationSecret`, `managementSessionSecret`) are strings when set.
+        Requires localhost binding; remote clients need a session. Restart the process for some changes (port, TLS dir, session secret, trust proxy, rate limits) to apply everywhere.
+      operationId: putServerSettings
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Updated settings and notice
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not from localhost
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: SQLite persistence not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/domains:
     get:
       summary: List configured apex domains
+      description: |
+        Returns **`dnsConsole`** (stored JSON), resolved **`dnsConsoleLinks`**, and known **`dnsConsoleProviderIds`**.
+        For link resolution order, see the top-level **Porkbun-related configuration** note.
       operationId: listDomains
       responses:
         "200":
@@ -103,10 +337,12 @@ paths:
       summary: Replace configured apex domains (SQLite)
       description: |
         Persists the ordered apex list to SQLite (`meta.root_domains`). First entry is primary.
-        Optional `dnsConsole` selects modular DNS management links (e.g. `porkbun`). All existing routes must remain under a listed apex. Requires localhost and bearer (when configured).
+        Optional **`dnsConsole`** selects modular DNS management links (e.g. `porkbun`). Omit the **`dnsConsole`** property to leave the stored value unchanged; send **`dnsConsole`: null** to clear it (then only **`DNS_CONSOLE_DEFAULT_PROVIDER`** / Settings apply for defaults). Empty **`dnsConsole`: {}** is invalid.
+        When **`dnsConsole`** is sent, it replaces the previous document; include both **`apexDomains`** and the full desired **`dnsConsole`** shape. Link resolution: **`byApex`** → **`defaultProvider`** → **`DNS_CONSOLE_DEFAULT_PROVIDER`** (see top-level Porkbun note).
+        All existing routes must remain under a listed apex. Requires localhost; remote clients need an express-easy-auth session.
       operationId: putDomains
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -163,7 +399,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -172,8 +408,7 @@ paths:
     get:
       summary: List all routes (persistent and ephemeral)
       description: |
-        No bearer required for the route itself; the listener is only reachable on localhost.
-        There is no per-client “ownership”; one shared secret applies when mutating routes.
+        Read-only listing; the listener is only reachable on localhost. Routes have no per-client “ownership” field in the payload.
       operationId: listRoutes
       responses:
         "200":
@@ -243,10 +478,10 @@ paths:
         Persists DDNS to `meta.ddns` (includes API secrets—protect database backups). The background scheduler
         reads this row each cycle, so changes apply without restarting the process. Omit `porkbunApiKey` /
         `porkbunSecretKey` or send empty strings to keep existing stored keys on update.
-        Requires localhost and bearer when `MANAGEMENT_SECRET` is set.
+        Requires localhost; remote clients need an express-easy-auth session.
       operationId: putDdns
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -270,7 +505,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -290,11 +525,11 @@ paths:
     delete:
       summary: Remove saved DDNS settings from SQLite
       description: |
-        Deletes `meta.ddns`; DDNS stays off until configured again with `PUT`. Does not erase the
-        public IP cache row. Requires localhost and bearer when `MANAGEMENT_SECRET` is set.
+        Deletes `meta.ddns` and `meta.ddns_last_run`; DDNS stays off until configured again with `PUT`.
+        Does not erase the public IP cache row. Requires localhost; remote clients need an express-easy-auth session.
       operationId: deleteDdns
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       responses:
         "200":
           description: Cleared; returns same shape as GET `data` (unconfigured until saved again)
@@ -306,7 +541,7 @@ paths:
                   data:
                     $ref: "#/components/schemas/DdnsStatus"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -319,6 +554,50 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Unexpected failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/ddns/sync:
+    post:
+      summary: Run Porkbun DDNS sync once
+      description: |
+        Triggers the same sync path as the background scheduler (IP discovery, Porkbun A/AAAA updates, SQLite cache).
+        Persists last-run telemetry to `meta.ddns_last_run`. Requires saved `meta.ddns` settings and localhost TCP
+        (same as `PUT /ddns`); remote clients need a session.
+      operationId: postDdnsSync
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Sync finished; returns same `data` shape as `GET /api/v1/ddns` (including `lastRun`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DdnsStatus"
+        "400":
+          description: No saved DDNS row, or sync cannot run (disabled, missing keys, or no zones)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Sync threw (e.g. Porkbun API error); last failure may be recorded under `lastRun`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Persistence lacks last-run support
           content:
             application/json:
               schema:
@@ -368,7 +647,7 @@ paths:
         Optional `concurrency` (default 100) controls parallel connect attempts.
       operationId: scanPorts
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       requestBody:
         required: false
         content:
@@ -399,7 +678,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -418,7 +697,7 @@ paths:
         Path `port` must be an integer; non-numeric paths yield `INVALID_PORT`.
       operationId: killProcess
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - name: port
           in: path
@@ -448,7 +727,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -474,7 +753,7 @@ paths:
         Conflicting reservations return 409 `SUBDOMAIN_CONFLICT` (not 401).
       operationId: reserve
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -511,7 +790,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Invalid or missing bearer token
+          description: Invalid or missing session
           content:
             application/json:
               schema:
@@ -527,7 +806,7 @@ paths:
       summary: Release a reserved subdomain
       operationId: release
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - name: subdomain
           in: path
@@ -551,9 +830,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: mgmt.sid
+      description: Session cookie after sign-in at `/login.html` or `POST /api/v1/auth/login`. Required for remote clients; same-machine (local operator) clients may omit.
   schemas:
     DdnsPutRequest:
       type: object
@@ -681,6 +962,27 @@ components:
             ipv6:
               nullable: true
               type: string
+        lastRun:
+          nullable: true
+          description: Last completed manual or scheduled sync attempt (from `meta.ddns_last_run`).
+          allOf:
+            - $ref: "#/components/schemas/DdnsLastRun"
+    DdnsLastRun:
+      type: object
+      required: [at, outcome, detail]
+      properties:
+        at:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+          enum: [success, skipped, failed]
+        detail:
+          type: string
+        skippedBecause:
+          nullable: true
+          type: string
+          description: Present when `outcome` is `skipped` (e.g. `ip_unchanged`, `no_public_ip`).
     ErrorResponse:
       type: object
       required: [error]
@@ -756,9 +1058,6 @@ components:
               type: array
               items:
                 type: integer
-            target:
-              type: string
-              description: Single upstream URL
             targets:
               type: array
               items:
@@ -779,7 +1078,6 @@ components:
         - oneOf:
             - required: [port]
             - required: [ports]
-            - required: [target]
             - required: [targets]
     BatchReserveRequest:
       type: object
@@ -788,7 +1086,7 @@ components:
         reservations:
           type: array
           minItems: 1
-          description: Each element uses the same shape as a single reserve body (subdomain, baseDomain, port | ports | target | targets, optional options)
+          description: Each element uses the same shape as a single reserve body (subdomain, baseDomain, port | ports | targets, optional options)
           items:
             $ref: "#/components/schemas/SingleReserveRequest"
     ReserveBatchResponse:

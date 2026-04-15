@@ -4,18 +4,18 @@ This endpoint provides instructions for LLMs on how to interact with the reverse
 
 ## Persistence and domains
 
-- **Storage:** Route data is stored in **SQLite** (`SQLITE_DB_PATH`, default `./reverse-proxy.db`). A legacy `ROUTE_CACHE_FILE` JSON may be imported once when the database is new.
+- **Storage:** Route data is stored in **SQLite** (`SQLITE_DB_PATH`, default `./reverse-proxy.db`).
 - **Multiple apex domains:** Configure apex zones with **`PUT /api/v1/domains`** (body `{"apexDomains":["primary.example","other.org"]}` — order matters; first is primary) or the management UI; this is stored in SQLite and **overrides** **`ROOT_DOMAINS`** from the environment when present. Otherwise use **`ROOT_DOMAINS`** as a comma-separated list. **`baseDomain` is always required** on **`POST /api/v1/reserve`** (each batch item) and as **`?baseDomain=`** on **`DELETE /api/v1/reserve/:subdomain`**. **Batch reserve:** `POST /api/v1/reserve` with `{ "reservations": [ { "subdomain", "baseDomain", … }, … ] }` to register several mappings at once, including different apex domains in one call.
 - **DNS management links (modular):** Optional `dnsConsole` on `PUT /api/v1/domains` (e.g. `{"defaultProvider":"porkbun"}`) or **`DNS_CONSOLE_DEFAULT_PROVIDER=porkbun`**. `GET /api/v1/domains` returns **`dnsConsoleLinks`** with provider labels and URLs. Only **Porkbun** is implemented; add providers under `src/infrastructure/dns/console/`.
-- **DDNS (Porkbun):** Optional background job; configuration is stored in SQLite (`meta.ddns`). Use **`GET /api/v1/ddns`** for status (no secrets returned), **`PUT /api/v1/ddns`** (localhost + bearer when configured) to save `enabled`, Porkbun keys, `domainMode` (`apex` uses apex list from **`PUT /api/v1/domains`** / registry; `explicit` uses `domains`), `matchNote` (must match Porkbun A/AAAA **notes** exactly), `intervalMs`, `ipLookupTimeoutMs`, optional **`ipv4Services`** / **`ipv6Services`** (URL lists for public IP discovery), and optional **`porkbunApiBaseUrl`**. **`DELETE /api/v1/ddns`** clears the row (DDNS off until configured again). Legacy **`DDNS_*` / `PORKBUN_*`** env vars are ignored if set.
+- **DDNS (Porkbun):** Optional background job; configuration is stored in SQLite (`meta.ddns`). Use **`GET /api/v1/ddns`** for status (no secrets returned; includes **`lastRun`** telemetry from `meta.ddns_last_run` when present), **`PUT /api/v1/ddns`** (localhost; non-loopback clients need an express-easy-auth session) to save `enabled`, Porkbun keys, `domainMode` (`apex` uses apex list from **`PUT /api/v1/domains`** / registry; `explicit` uses `domains`), `matchNote` (must match Porkbun A/AAAA **notes** exactly), `intervalMs`, `ipLookupTimeoutMs`, optional **`ipv4Services`** / **`ipv6Services`** (URL lists for public IP discovery), and optional **`porkbunApiBaseUrl`**. **`POST /api/v1/ddns/sync`** runs one sync immediately (same as the scheduler). **`DELETE /api/v1/ddns`** clears the row and last-run telemetry (DDNS off until configured again).
 
 ## Network and security model
 
 - The management HTTP server listens on **127.0.0.1** and **`MANAGEMENT_INTERFACE_PORT`** (default **24789**). Reach it via SSH port-forward or equivalent — it is not exposed on the public internet by default.
 - **Authentication:** {{managementAuthNote}}
-- **Bearer vs conflicts:** `401` + `UNAUTHORIZED` means invalid or missing bearer. **Subdomain or mapping conflicts** use **`409`** + `SUBDOMAIN_CONFLICT`, never `401`.
+- **Auth vs conflicts:** `401` + `UNAUTHORIZED` means missing or invalid session when auth is required. **Subdomain or mapping conflicts** use **`409`** + `SUBDOMAIN_CONFLICT`, never `401`.
 - **Rate limiting:** Global per management listener (default **300** requests per **60 seconds**; env **`MANAGEMENT_RATE_LIMIT_MAX`** / **`MANAGEMENT_RATE_LIMIT_WINDOW_MS`**).
-- **Ownership:** There is a **single shared secret**, not per-client API keys. `GET /api/v1/routes` lists what is registered — there is no separate “owner id” per subdomain.
+- **Ownership:** Auth is per express-easy-auth user. `GET /api/v1/routes` lists what is registered — there is no separate “owner id” per subdomain in the route model.
 
 ## Error shape
 
@@ -32,7 +32,7 @@ All JSON error responses share:
 }
 ```
 
-`resolution` is always present for management JSON errors: it summarizes how to fix or where to look (OpenAPI paths, `MANAGEMENT_SECRET`, localhost requirement, etc.). `details` may be an object or array when extra context is provided (e.g. conflict `host` / `reason`).
+`resolution` is always present for management JSON errors: it summarizes how to fix or where to look (OpenAPI paths, `/api/v1/auth`, localhost requirement, etc.). `details` may be an object or array when extra context is provided (e.g. conflict `host` / `reason`).
 
 ## Machine-readable API
 
@@ -43,14 +43,14 @@ All JSON error responses share:
 Shipped in this repository under **`packages/reverse-proxy-client/`** and published on npm as **`@javagt/reverse-proxy-client`**.
 
 - **Install (any Node 22.5+ ESM project):** `npm install @javagt/reverse-proxy-client` from the [npm registry](https://www.npmjs.com/package/@javagt/reverse-proxy-client), or from a checkout with `npm install @javagt/reverse-proxy-client@file:./path/to/reverse-proxy/packages/reverse-proxy-client`.
-- **HTTP API:** `import { createHttpClient } from "@javagt/reverse-proxy-client"` — pass `baseUrl` (e.g. `http://127.0.0.1:24789` or `MANAGEMENT_URL`) and optional `token` matching `MANAGEMENT_SECRET`. Methods mirror REST: `health`, `getRoutes`, `reserve(body)`, `release(subdomain, baseDomain)`, `putDomains`, `scanPorts`, DDNS helpers, etc.
+- **HTTP API:** `import { createHttpClient } from "@javagt/reverse-proxy-client"` — pass `baseUrl` (e.g. `http://127.0.0.1:24789` or `MANAGEMENT_URL`). On loopback no session is required; off loopback you must supply the **`mgmt.sid`** session cookie (e.g. after `POST /api/v1/auth/login`) on each request. Methods mirror REST: `health`, `getRoutes`, `reserve(body)`, `release(subdomain, baseDomain)`, `putDomains`, `scanPorts`, DDNS helpers, etc.
 - **Offline / hybrid:** `createDbClient` reads the same SQLite file as the server (`SQLITE_DB_PATH`); **`createAutoClient`** probes `GET /api/v1/health` and falls back to SQLite when the management server is down (see package README for caveats — stop the server before mutating via DB mode).
-- **CLI:** **`reverse-proxy-mgmt`** — `npm exec reverse-proxy-mgmt -- health` (after install), or `npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- …` from the monorepo root. Flags: `--url`, `--token`, `--mode auto|http|db`, `--db`, etc.
+- **CLI:** **`reverse-proxy-mgmt`** — `npm exec reverse-proxy-mgmt -- health` (after install), or `npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- …` from the monorepo root. Flags: `--url`, `--mode auto|http|db`, `--db`, etc.
 - **Human docs:** [packages/reverse-proxy-client/README.md](https://github.com/JavaGT/reverse-proxy/blob/main/packages/reverse-proxy-client/README.md) in the repo (install, env alignment with `MANAGEMENT_INTERFACE_PORT`, examples).
 
 ## Control plane liveness
 
-- `GET /api/v1/health` or **`GET /api/v1/status`** — returns `{ "data": { "status": "OK" } }`. Use for “is the management API up?” (separate from the public HTTPS data plane).
+- `GET /api/v1/health` or **`GET /api/v1/status`** — returns `{ "data": { "status": "OK" } }`. Use for “is the management API up?” (separate from the public HTTPS data plane). **Non-loopback** callers need a session (same as other routes); loopback may call without signing in.
 
 ## Subdomain registration
 
@@ -58,12 +58,12 @@ Shipped in this repository under **`packages/reverse-proxy-client/`** and publis
 
 **Headers:**
 - `Content-Type: application/json`
-- `Authorization: Bearer <secret_key>` (when `MANAGEMENT_SECRET` is set)
+- When not on loopback: session cookie **`mgmt.sid`** from **`/api/v1/auth`** (sign in at **`/login.html`** or `POST /api/v1/auth/login`)
 
 **Required body fields (single reservation):**
 - `subdomain`: The DNS label (e.g. `"my-app"`), not the full hostname.
 - `baseDomain`: The apex FQDN (e.g. `"example.com"`), must be one of the configured apex domains.
-- One of: `port` (number), `ports` (number[]), `target` (string URL), `targets` (string[] or object[]).
+- One of: `port` (number), `ports` (number[]), `targets` (string[] or object[] with `url` / `healthy`).
 
 **Batch:** send `reservations` (non-empty array). Each element must include `subdomain`, `baseDomain`, and the same target fields as a single call. Response: `{ "data": { "batch": true, "results": [ { "outcome", "data" }, … ] } }` with HTTP **201** if any item was newly created, else **200**.
 
@@ -110,13 +110,13 @@ Shipped in this repository under **`packages/reverse-proxy-client/`** and publis
 - `GET /api/v1/health` — control plane ping.
 - `GET /api/v1/status` — same as `/health`.
 - `GET /api/v1/domains` — configured apex domains (`primary` + `apexDomains`).
-- `PUT /api/v1/domains` — replace apex list (SQLite; localhost + bearer when configured).
+- `PUT /api/v1/domains` — replace apex list (SQLite; localhost; non-loopback needs session).
 - `GET /api/v1/routes` — list routes (localhost-only listener; includes `publicUrl` / `baseDomain` per entry).
 - `GET /api/v1/network` — local interface addresses, public IP discovery, DNS rows for each apex and wildcard probe only.
-- `GET /api/v1/ddns` — DDNS status (SQLite-backed). `PUT` / `DELETE` require localhost + bearer when configured.
+- `GET /api/v1/ddns` — DDNS status (SQLite-backed). `PUT` / `DELETE` / `POST /ddns/sync` require localhost; non-loopback needs session.
 - `POST /api/v1/reserve` — reserve or idempotent replay.
 - `DELETE /api/v1/reserve/:subdomain?baseDomain=…` — release (`baseDomain` required).
-- `POST /api/v1/scan` — scan local ports (auth + localhost).
-- `DELETE /api/v1/process/:port` — kill process on port (auth + localhost).
+- `POST /api/v1/scan` — scan local ports (localhost; non-loopback needs session).
+- `DELETE /api/v1/process/:port` — kill process on port (localhost; non-loopback needs session).
 - `GET /api/v1/openapi.yaml` or `GET /openapi.yaml` — OpenAPI document.
 - `GET /llms.txt` — this file (includes **Official Node.js client** for `@javagt/reverse-proxy-client`).

@@ -13,7 +13,7 @@ A lightweight, self-hosted HTTPS reverse proxy for routing hostnames to local se
    cp .env.example .env
    ```
 
-   Edit `.env` and set at least **`TLS_CERT_DIR`** (a directory containing `privkey.pem` and `fullchain.pem`) and **`ROOT_DOMAINS`** or **`ROOT_DOMAIN`**. For mutating API calls from scripts or the UI, set **`MANAGEMENT_SECRET`** (for example `openssl rand -hex 32`); `GET /api/v1/health` does not require a bearer token.
+   Edit `.env` and set at least **`TLS_CERT_DIR`** (a directory containing `privkey.pem` and `fullchain.pem`) and **`ROOT_DOMAINS`** (comma-separated apex hostnames). Non-loopback access uses **`@javagt/express-easy-auth`** sessions at **`/api/v1/auth`** (sign in at **`/login.html`**); set **`MANAGEMENT_SESSION_SECRET`** for cookie signing. **Loopback** may call the API and UI without signing in.
 
 2. **Run** — from the repo root:
 
@@ -37,7 +37,7 @@ A lightweight, self-hosted HTTPS reverse proxy for routing hostnames to local se
    npm install @javagt/reverse-proxy-client@file:../reverse-proxy/packages/reverse-proxy-client
    ```
 
-   Use `createHttpClient` with the same **`MANAGEMENT_INTERFACE_PORT`** / **`MANAGEMENT_URL`** and **`MANAGEMENT_SECRET`** as the server. The script must run somewhere that can reach **`http://127.0.0.1:<port>`** (same host as the proxy, or port-forward to loopback).
+   Use `createHttpClient` with the same **`MANAGEMENT_INTERFACE_PORT`** / **`MANAGEMENT_URL`**. From **loopback**, no session cookie is required. From elsewhere you must reuse a **`mgmt.sid`** session (Node does not do this automatically—use port-forward to loopback or implement login and pass `Cookie` on `fetch`). The script must reach **`http://127.0.0.1:<port>`** (or port-forward to loopback).
 
    ```js
    import { createHttpClient } from "@javagt/reverse-proxy-client";
@@ -47,8 +47,7 @@ A lightweight, self-hosted HTTPS reverse proxy for routing hostnames to local se
        `http://127.0.0.1:${process.env.MANAGEMENT_INTERFACE_PORT || "24789"}`;
 
    const http = createHttpClient({
-       baseUrl,
-       token: process.env.MANAGEMENT_SECRET || null
+       baseUrl
    });
 
    const { data } = await http.reserve({
@@ -58,7 +57,7 @@ A lightweight, self-hosted HTTPS reverse proxy for routing hostnames to local se
    });
    ```
 
-   `baseDomain` must be one of the server’s configured apex zones; you can also pass **`ports`**, **`target` / `targets`**, or **`options`** (see [Notable endpoints](#notable-endpoints) and [packages/reverse-proxy-client/README.md](packages/reverse-proxy-client/README.md)).
+   `baseDomain` must be one of the server’s configured apex zones; you can also pass **`ports`**, **`targets`**, or **`options`** (see [Notable endpoints](#notable-endpoints) and [packages/reverse-proxy-client/README.md](packages/reverse-proxy-client/README.md)).
 
 Full variable list and one-time setup notes: **[Setup](#setup)** and **[Environment variables](#environment-variables-summary)** below.
 
@@ -67,7 +66,7 @@ Full variable list and one-time setup notes: **[Setup](#setup)** and **[Environm
 - Listens on **443** (HTTPS) and routes by `Host` to registered upstreams (HTTP to localhost ports, with optional health checks and round-robin across targets).
 - Listens on **80** and redirects to HTTPS.
 - **Management API** on a dedicated host (ephemeral route), bound to **127.0.0.1** only — use SSH port-forward or equivalent to reach it.
-- **Persistence:** SQLite database (`SQLITE_DB_PATH`); legacy `route-cache.json` can be imported once on first run if configured.
+- **Persistence:** SQLite database (`SQLITE_DB_PATH`).
 - **Multi-domain:** Apex zones may be stored in **SQLite** via **`PUT /api/v1/domains`** (or the management UI); when present, that list overrides **`ROOT_DOMAINS`** from the environment. Otherwise use comma-separated **`ROOT_DOMAINS`**. Optional **`baseDomain`** on reserve and `?baseDomain=` on delete when more than one apex is configured.
 - **TLS:** Reloads certificates from `TLS_CERT_DIR` without full process restart. With **multiple** values in `ROOT_DOMAINS`, use one certificate whose **Subject Alternative Name (SAN)** lists every apex (or a wildcard) you serve; the listener uses a single cert context, so a cert valid for only one zone will trigger browser warnings on the others.
 - **Optional DDNS:** Porkbun API integration on an interval; settings live in SQLite (`meta.ddns`) and are edited via the management UI, **`PUT /api/v1/ddns`**, or the **`reverse-proxy-mgmt ddns`** CLI — not via environment variables.
@@ -93,10 +92,10 @@ server.mjs               # Composition root
 ```bash
 npm install
 cp .env.example .env
-# Edit .env: TLS_CERT_DIR, ROOT_DOMAINS or ROOT_DOMAIN, SQLITE_DB_PATH, etc.
+# Edit .env: TLS_CERT_DIR, ROOT_DOMAINS, SQLITE_DB_PATH, etc.
 
-# Recommended: bearer token for mutating API calls (set in .env, do not commit)
-# MANAGEMENT_SECRET=<output of: openssl rand -hex 32>
+# Recommended in production: session signing for express-easy-auth (set in .env, do not commit)
+# MANAGEMENT_SESSION_SECRET=<output of: openssl rand -hex 32>
 ```
 
 The server loads `.env` from the current working directory at startup (`process.loadEnvFile`). Alternatively you can inject env without runtime loading: `node --env-file=.env server.mjs` (Node 20.6+).
@@ -106,14 +105,12 @@ The server loads `.env` from the current working directory at startup (`process.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `TLS_CERT_DIR` | yes | — | Directory with `privkey.pem` and `fullchain.pem` |
-| `ROOT_DOMAINS` | no | from `ROOT_DOMAIN` | Comma-separated apex hostnames (first = primary default); ignored at runtime if apex list exists in SQLite |
-| `ROOT_DOMAIN` | no | `javagrant.ac.nz` | Used if `ROOT_DOMAINS` is unset |
+| `ROOT_DOMAINS` | no | `javagrant.ac.nz` | Comma-separated apex hostnames (first = primary default); ignored at runtime if apex list exists in SQLite |
 | `SQLITE_DB_PATH` | no | `./reverse-proxy.db` | SQLite file for routes and meta |
-| `ROUTE_CACHE_FILE` | no | `./route-cache.json` | Legacy JSON path; imported once if DB is new |
 | `MANAGEMENT_SUBDOMAIN` | no | `reverse-proxy` | Label for management UI/API host |
 | `MANAGEMENT_INTERFACE_PORT` | no | `24789` | Localhost port for the management HTTP server (`127.0.0.1`) |
 | `MANAGEMENT_BASE_DOMAIN` | no | first `ROOT_DOMAINS` entry | Apex used for management hostname |
-| `MANAGEMENT_SECRET` | no | — | Bearer token for mutating management endpoints (same value as `Authorization` header) |
+| `MANAGEMENT_SESSION_SECRET` | no (yes in prod) | dev default | Secret for management `express-session` cookies |
 | `MANAGEMENT_RATE_LIMIT_MAX` | no | `300` | Max requests per window for the management HTTP API (global) |
 | `MANAGEMENT_RATE_LIMIT_WINDOW_MS` | no | `60000` | Rate-limit window in milliseconds |
 | `HEALTH_CHECK_INTERVAL_MS` | no | `30000` | Upstream health probe interval |
@@ -151,11 +148,13 @@ Errors (stable shape):
 }
 ```
 
-`resolution` is included on every management JSON error to speed up fixes (wrong bearer, missing `baseDomain`, rate limits, etc.). `details` may be an object or array when provided (for example conflict `host` / `reason`).
+`resolution` is included on every management JSON error to speed up fixes (auth, missing `baseDomain`, rate limits, etc.). `details` may be an object or array when provided (for example conflict `host` / `reason`).
 
 ### Authentication
 
-If `MANAGEMENT_SECRET` is set in the environment, mutating endpoints expect `Authorization: Bearer <secret>`.
+**`@javagt/express-easy-auth`** at **`/api/v1/auth`** provides sessions (password, TOTP, passkeys). **Non-loopback** clients must sign in (browser **`/login.html`** or `POST /api/v1/auth/login` with a cookie-aware client); the session cookie applies to the static UI and all **`/api/v1/*`** routes. **Loopback** clients need no credentials.
+
+**Passkeys (WebAuthn):** For each request, `rpID` and `origin` follow the browser’s **`Host`** (and **`X-Forwarded-Proto`** when present), so signing in at `https://reverse-proxy.example.com` uses that hostname instead of a fixed `localhost` value. Loopback addresses still use **`rpID` = `localhost`**. If you terminate TLS in front of the management app, set **`MANAGEMENT_TRUST_PROXY=1`** so Express sees the correct scheme. Credentials are **per hostname** (a passkey created on `127.0.0.1` is not the same WebAuthn credential as on your public management hostname). For a **non-loopback IP** in `Host`, WebAuthn falls back to **`MANAGEMENT_AUTH_RP_ID`** / **`MANAGEMENT_BASE_DOMAIN`**.
 
 ### Notable endpoints
 
@@ -169,7 +168,7 @@ If `MANAGEMENT_SECRET` is set in the environment, mutating endpoints expect `Aut
 | `POST` | `/api/v1/reserve` | Body: **`subdomain`**, **`baseDomain`**, ports or `targets`, optional `options`. Or **`reservations`**: array of the same shape for batch (multiple apexes in one request). Same mapping repeated returns **200** (idempotent); new or replaced mapping **201**; conflict **409** `SUBDOMAIN_CONFLICT`. |
 | `DELETE` | `/api/v1/reserve/:subdomain` | Query **`baseDomain`** (required): apex for the mapping to release. |
 | `POST` | `/api/v1/scan` | JSON body optional: `start`, `end` (inclusive; `end - start` must be 1–10000), `concurrency` — list open ports and processes |
-| `DELETE` | `/api/v1/process/:port` | Terminate listener on TCP port (localhost + bearer when configured) |
+| `DELETE` | `/api/v1/process/:port` | Terminate listener on TCP port (localhost; non-loopback needs session) |
 | `GET` | `/api/v1/openapi.yaml` or `/openapi.yaml` | Same OpenAPI 3 document (use for codegen) |
 | `GET` | `/llms.txt` | Human-oriented integration notes for tools (includes **`@javagt/reverse-proxy-client`**) |
 
@@ -195,13 +194,6 @@ Open the management server root in a browser (via port-forward). The interface i
 ## Verification and tests
 
 ```bash
-# All tests (from repo root)
-node --test $(find tests -name '*.mjs' | tr '\n' ' ')
-
-# Unused dependency / export check
-npx knip
+npm test
 ```
 
-## Legacy JSON cache
-
-If you previously used `route-cache.json`, point `ROUTE_CACHE_FILE` at that path once; on an empty database the server will import routes and optional `manualOverrides`, then mark migration complete. New deployments should rely on SQLite only.

@@ -12,23 +12,6 @@ function parseCommaDomains(raw) {
 }
 
 /**
- * Legacy manualOverrides were `{ subdomain: port }` for a single apex.
- * New shape is `{ [apex]: { [subdomain]: port | port[] } }`.
- * @param {unknown} raw
- * @param {string} primaryApex
- */
-function expandManualOverrides(raw, primaryApex) {
-    if (!raw || typeof raw !== "object") return {};
-    const values = Object.values(raw);
-    if (values.length === 0) return {};
-    const first = values[0];
-    if (typeof first === "number" || Array.isArray(first)) {
-        return { [primaryApex]: raw };
-    }
-    return raw;
-}
-
-/**
  * @typedef {{ info?: (o: object, m: string) => void, warn?: (o: object, m: string) => void, error?: (o: object, m: string) => void }} BootstrapLogger
  */
 
@@ -44,7 +27,7 @@ export async function hydrateRegistryFromPersistence(persistence, env, options =
     const { routes: initialRoutes, manualOverrides: rawManual, rootDomainConfig } = await persistence.load();
 
     const defaultRoots = options.defaultRootDomains ?? "javagrant.ac.nz";
-    const fromEnv = parseCommaDomains(env.ROOT_DOMAINS || env.ROOT_DOMAIN || defaultRoots);
+    const fromEnv = parseCommaDomains(env.ROOT_DOMAINS || defaultRoots);
     const fromDb = rootDomainConfig?.apexDomains?.length ? rootDomainConfig.apexDomains : null;
     const effectiveRoots = fromDb ?? fromEnv;
 
@@ -61,7 +44,7 @@ export async function hydrateRegistryFromPersistence(persistence, env, options =
 
     registry.hydrate(initialRoutes);
 
-    const manualOverrides = expandManualOverrides(rawManual, effectiveRoots[0]);
+    const manualOverrides = rawManual && typeof rawManual === "object" && !Array.isArray(rawManual) ? rawManual : {};
     const apexSet = new Set(effectiveRoots);
 
     for (const [apex, subMap] of Object.entries(manualOverrides)) {
@@ -69,8 +52,15 @@ export async function hydrateRegistryFromPersistence(persistence, env, options =
             log.warn?.({ apex }, "Skipping manual overrides for apex not in configured roots");
             continue;
         }
-        if (!subMap || typeof subMap !== "object") continue;
+        if (!subMap || typeof subMap !== "object" || Array.isArray(subMap)) {
+            log.warn?.({ apex }, "Skipping manual overrides: expected object map of subdomain to port(s)");
+            continue;
+        }
         for (const [subdomain, ports] of Object.entries(subMap)) {
+            if (typeof ports !== "number" && !Array.isArray(ports)) {
+                log.warn?.({ apex, subdomain }, "Skipping manual override entry: port must be a number or number[]");
+                continue;
+            }
             try {
                 const host = `${subdomain}.${apex}`;
                 const targetArray = Array.isArray(ports) ? ports : [ports];

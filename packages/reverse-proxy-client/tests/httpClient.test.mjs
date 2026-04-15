@@ -5,7 +5,7 @@ import { ManagementApiError } from "../src/errors.mjs";
 
 test("createHttpClient maps JSON errors to ManagementApiError", async () => {
     const fetch = async () =>
-        new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "nope", resolution: "add token" } }), {
+        new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "nope", resolution: "sign in" } }), {
             status: 401,
             headers: { "Content-Type": "application/json" }
         });
@@ -14,6 +14,24 @@ test("createHttpClient maps JSON errors to ManagementApiError", async () => {
     await assert.rejects(
         () => client.getRoutes(),
         err => err instanceof ManagementApiError && err.code === "UNAUTHORIZED" && err.status === 401
+    );
+});
+
+test("createHttpClient maps string error body to ManagementApiError", async () => {
+    const fetch = async () =>
+        new Response(JSON.stringify({ error: "Not authenticated" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" }
+        });
+
+    const client = createHttpClient({ baseUrl: "http://127.0.0.1:9", fetch });
+    await assert.rejects(
+        () => client.getRoutes(),
+        err =>
+            err instanceof ManagementApiError &&
+            err.code === "HTTP_ERROR" &&
+            err.message === "Not authenticated" &&
+            err.status === 401
     );
 });
 

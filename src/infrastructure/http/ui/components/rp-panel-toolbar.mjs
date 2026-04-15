@@ -19,12 +19,13 @@ export class RpPanelToolbar extends HTMLElement {
                     margin-bottom: 0.35rem;
                 }
                 .mgmt-panel-title {
-                    font-family: "Linux Libertine", Georgia, "Times New Roman", Times, serif;
-                    font-size: 1.08rem;
-                    font-weight: normal;
+                    font-family: var(--font-sans, system-ui, sans-serif);
+                    font-size: 1.05rem;
+                    font-weight: 650;
+                    letter-spacing: -0.02em;
                     margin: 0;
                     padding-top: 0.1rem;
-                    line-height: 1.2;
+                    line-height: 1.25;
                     color: var(--text, inherit);
                 }
                 .mgmt-panel-actions {

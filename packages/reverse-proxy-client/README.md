@@ -28,7 +28,7 @@ npm install @javagt/reverse-proxy-client@file:../reverse-proxy/packages/reverse-
 
 - Node.js **22+** (uses `globalThis.fetch` and `node:sqlite` via the main app’s persistence layer).
 - Management API is **localhost-only**; run the CLI on the same host as the proxy (or tunnel to `127.0.0.1`).
-- When `MANAGEMENT_SECRET` is set on the server, pass the same value as `Authorization: Bearer` (`--token` or `MANAGEMENT_SECRET`).
+- HTTP calls from **non-loopback** need an express-easy-auth **session** (same `mgmt.sid` cookie the browser gets after `POST /api/v1/auth/login` or the **`/login.html`** page). Node `fetch` does not send that cookie unless you implement login or inject a `Cookie` header yourself. Co-located **loopback** clients need no session.
 
 ### Management base URL (port discovery)
 
@@ -43,7 +43,7 @@ const baseUrl =
     process.env.MANAGEMENT_URL?.replace(/\/$/, "") ||
     `http://127.0.0.1:${managementPort}`;
 
-const http = createHttpClient({ baseUrl, token: process.env.MANAGEMENT_SECRET });
+const http = createHttpClient({ baseUrl });
 ```
 
 Use the same `MANAGEMENT_URL` / port as the reverse-proxy `.env` so co-located tools stay in sync when the management port is changed.
@@ -69,8 +69,7 @@ const baseUrl =
     `http://127.0.0.1:${managementPort}`;
 
 const http = createHttpClient({
-    baseUrl,
-    token: process.env.MANAGEMENT_SECRET
+    baseUrl
 });
 
 const { data: routes } = await http.getRoutes();
@@ -82,7 +81,6 @@ const db = createDbClient({
 
 const auto = createAutoClient({
     baseUrl,
-    token: process.env.MANAGEMENT_SECRET,
     dbPath: "./reverse-proxy.db"
 });
 // Probes GET /api/v1/health; on failure uses SQLite for health/domains/routes/reserve/release/putDomains/getDdns/putDdns/deleteDdns.
@@ -94,7 +92,7 @@ const auto = createAutoClient({
 Optional `fetch` override (tests or custom stacks):
 
 ```js
-createHttpClient({ baseUrl, token, fetch: myFetch });
+createHttpClient({ baseUrl, fetch: myFetch });
 createAutoClient({ ...options, fetch: myFetch });
 ```
 
@@ -116,11 +114,12 @@ npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- release app --bas
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns get
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns set --file ./ddns-body.json
 npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns clear
+npm exec -w @javagt/reverse-proxy-client reverse-proxy-mgmt -- ddns sync
 ```
 
-Flags: `--url`, `--token`, `--db`, `--mode auto|http|db`, `--json`, `--file` (JSON bodies for `domains set` / `reserve` / `scan` / `ddns set`). Environment: `MANAGEMENT_URL`, `MANAGEMENT_SECRET`, `SQLITE_DB_PATH`.
+Flags: `--url`, `--db`, `--mode auto|http|db`, `--json`, `--file` (JSON bodies for `domains set` / `reserve` / `scan` / `ddns set`). Environment: `MANAGEMENT_URL`, `SQLITE_DB_PATH`.
 
-**DDNS:** `ddns get` is read-only over HTTP. `ddns set` and `ddns clear` mutate SQLite and require the management server on localhost with bearer auth when `MANAGEMENT_SECRET` is set (same as `PUT`/`DELETE /api/v1/ddns`). In `--mode db`, stop the proxy before `ddns set` or `ddns clear`.
+**DDNS:** `ddns get` is read-only over HTTP. `ddns set`, `ddns sync`, and `ddns clear` hit the management server on localhost (same rules as `PUT` / `DELETE /api/v1/ddns` and `POST /api/v1/ddns/sync`: loopback needs no session; non-loopback needs a session cookie). `ddns sync` is HTTP-only. In `--mode db`, stop the proxy before `ddns set` or `ddns clear`.
 
 ## License
 

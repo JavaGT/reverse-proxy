@@ -14,36 +14,7 @@
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <header class="mgmt-app-bar" role="banner">
-        <div class="mgmt-app-bar-inner">
-            <div class="mgmt-app-brand">
-                <a href="index.html#overview" class="mgmt-app-title">Reverse proxy</a>
-                <span class="mgmt-app-tagline">DDNS (Porkbun) · 127.0.0.1</span>
-            </div>
-            <div class="mgmt-app-tools">
-                <label for="mgmt-secret">Bearer</label>
-                <input type="password" id="mgmt-secret" autocomplete="off" placeholder="if required" size="14">
-                <span class="mgmt-theme-label">Theme</span>
-                <button type="button" class="mgmt-btn mgmt-theme-cycle" id="theme-cycle-btn">System</button>
-                <button type="button" class="mgmt-btn" id="open-help" title="Help (?)">Help</button>
-                <button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all">Refresh</button>
-            </div>
-            <nav class="mgmt-app-nav" aria-label="Page sections">
-                <span class="mgmt-app-nav-main">
-                    <a href="index.html#overview">Overview</a>
-                    <a href="index.html#routes">Routes</a>
-                    <a href="index.html#domains">Domains</a>
-                    <a href="index.html#network">Network</a>
-                    <a href="index.html#scanner">Scanner</a>
-                    <a href="index.html#api">API</a>
-                </span>
-                <span class="mgmt-app-nav-divider" aria-hidden="true">|</span>
-                <span class="mgmt-app-nav-external">
-                    <span class="mgmt-app-nav-current" aria-current="page">DDNS</span>
-                </span>
-            </nav>
-        </div>
-    </header>
+    <rp-mgmt-header tagline="DDNS (Porkbun) · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh" current="ddns"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
@@ -52,7 +23,7 @@
                 <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
                 <div class="mgmt-table-collapsible mgmt-table-collapsed">
                     <div class="mgmt-table-collapsible-bar">
-                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-ddns-help">Expand</button>
+                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-ddns-help">Show table</button>
                     </div>
                     <div class="mgmt-table-collapsible-body" id="mgmt-coll-ddns-help">
                         <div class="mgmt-table-wrap mgmt-help-table-wrap">
@@ -86,11 +57,11 @@
         </div>
     </rp-mgmt-modal>
 
-    <div class="mgmt-page">
+    <main id="main-content" class="mgmt-page">
         <section id="ddns-settings" class="mgmt-section">
             <rp-ddns-panel></rp-ddns-panel>
         </section>
-    </div>
+    </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>
 </body>

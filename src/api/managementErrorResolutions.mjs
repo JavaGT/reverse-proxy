@@ -4,7 +4,7 @@
  */
 const RESOLUTIONS = {
     UNAUTHORIZED:
-        "Send header `Authorization: Bearer <secret>` where `<secret>` matches `MANAGEMENT_SECRET` on the server. If the env var is unset, mutating endpoints do not require a token.",
+        "For remote clients: sign in via `/login.html` or `POST /api/v1/auth/login` (passkey or password) so the browser or HTTP client sends the session cookie (`mgmt.sid`). Same-machine clients skip this: loopback (127.0.0.0/8 or ::1), trusted `X-Forwarded-For` loopback, any comma-separated `X-Forwarded-For` hop matching a local interface IP, cached outbound public IP (same discovery as GET /api/v1/network; disable with `MANAGEMENT_AUTO_PUBLIC_EGRESS_IP=0`), or `MANAGEMENT_LOCAL_OPERATOR_IPS` for manual WAN overrides.",
     FORBIDDEN:
         "The management API only accepts connections to 127.0.0.1. Use SSH local port forwarding (e.g. `ssh -L 24789:127.0.0.1:24789 host`) or run the client on the same machine.",
     NOT_FOUND:
@@ -28,7 +28,7 @@ const RESOLUTIONS = {
     SUBDOMAIN_CONFLICT:
         "The host is reserved or blocked while a health-checked route is healthy. Use another subdomain, release the route first, or wait until upstream probes mark targets unhealthy so replace is allowed.",
     RESERVATION_FAILED:
-        "Fix subdomain (single DNS label), `baseDomain` (must be a listed apex), and one of `port` / `ports` / `target` / `targets` per OpenAPI `SingleReserveRequest`.",
+        "Fix subdomain (single DNS label), `baseDomain` (must be a listed apex), and one of `port` / `ports` / `targets` per OpenAPI `SingleReserveRequest`.",
     ROUTE_NOT_FOUND:
         "Nothing is registered for that subdomain on the given apex. List mappings with `GET /api/v1/routes` and pass the correct `baseDomain` query parameter.",
     RELEASE_FAILED:
@@ -42,7 +42,23 @@ const RESOLUTIONS = {
     PROCESS_NOT_FOUND:
         "No process was listening on that port when checked. Use `POST /api/v1/scan` to find open ports, or verify with OS tools.",
     KILL_FAILED:
-        "The server could not signal the process (permissions or race). Check logs; you may need to stop the process manually on the host."
+        "The server could not signal the process (permissions or race). Check logs; you may need to stop the process manually on the host.",
+    INVALID_REGISTRATION_SECRET:
+        "Send the same value as `MANAGEMENT_REGISTRATION_SECRET` in the JSON body as `registrationSecret` when calling `POST /api/v1/auth/register`. Operators can read it with `GET /api/v1/registration-secret` (same-machine or signed-in) or use **Accounts** (`/accounts.html`) to copy the invite secret when configured.",
+    REGISTRATION_NOT_CONFIGURED:
+        "Set `MANAGEMENT_REGISTRATION_SECRET` in the server environment to allow new account registration, then restart.",
+    ACCOUNT_NOT_FOUND:
+        "List accounts with `GET /api/v1/accounts` and use a valid `id` from the response in `DELETE /api/v1/accounts/:userId`.",
+    CANNOT_DELETE_SELF:
+        "Sign out and use another operator session, or delete this user from a same-machine (local operator) session without signing in as them.",
+    CANNOT_DELETE_LAST_ACCOUNT:
+        "Create another account first (e.g. via `/register.html` with the invite secret), or rely on same-machine management access without deleting the only user.",
+    DDNS_NOT_CONFIGURED:
+        "Use `PUT /api/v1/ddns` or the DDNS page to save Porkbun keys and zones first, then retry `POST /api/v1/ddns/sync`.",
+    DDNS_SYNC_IDLE:
+        "Enable DDNS, ensure both API keys are stored, and choose apex or explicit zones so at least one zone is listed; check `GET /api/v1/ddns` for `schedulerState` and `domains`.",
+    DDNS_SYNC_FAILED:
+        "Inspect server logs for `ddns_failed` / Porkbun API errors; verify keys, network egress, and that matching DNS records exist with the configured match note."
 };
 
 const FALLBACK =

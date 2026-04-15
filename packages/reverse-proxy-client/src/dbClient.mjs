@@ -18,7 +18,6 @@ function parseReservationTargets(body) {
     if (!reservationTargets) {
         if (body.ports) reservationTargets = body.ports;
         else if (body.port !== undefined && body.port !== null) reservationTargets = [body.port];
-        else if (body.target) reservationTargets = [body.target];
     }
     return reservationTargets;
 }
@@ -28,7 +27,6 @@ function parseReservationTargets(body) {
  *
  * @param {{
  *   dbPath: string,
- *   legacyRouteCacheFile?: string | null,
  *   env?: NodeJS.ProcessEnv,
  *   publicUrlHttpsPrefix?: string,
  *   publicUrlHttpPrefix?: string,
@@ -36,9 +34,7 @@ function parseReservationTargets(body) {
  * }} options
  */
 export function createDbClient(options) {
-    const persistence = new SqlitePersistence(options.dbPath, {
-        legacyRouteCacheFile: options.legacyRouteCacheFile ?? undefined
-    });
+    const persistence = new SqlitePersistence(options.dbPath);
     const env = options.env ?? process.env;
     const publicUrlHttpsPrefix = options.publicUrlHttpsPrefix ?? "https";
     const publicUrlHttpPrefix = options.publicUrlHttpPrefix ?? "http";
@@ -127,7 +123,7 @@ export function createDbClient(options) {
                 throw new ManagementApiError(
                     400,
                     "INVALID_REQUEST",
-                    `reservations[${i}]: targets, ports, or target is required`,
+                    `reservations[${i}]: targets, ports, or port is required`,
                     null,
                     null
                 );
@@ -238,7 +234,7 @@ export function createDbClient(options) {
 
                 const reservationTargets = parseReservationTargets(body);
                 if (!reservationTargets || (Array.isArray(reservationTargets) && reservationTargets.length === 0)) {
-                    throw new ManagementApiError(400, "INVALID_REQUEST", "Targets, ports, or target is required", null, null);
+                    throw new ManagementApiError(400, "INVALID_REQUEST", "targets, ports, or port is required", null, null);
                 }
 
                 const outcome = performReservation(
@@ -414,7 +410,9 @@ export function createDbClient(options) {
                     /* ignore */
                 }
             }
-            return { data: { ...summary, cachedPublicIp } };
+            const lastRun =
+                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
+            return { data: { ...summary, cachedPublicIp, lastRun } };
         },
 
         /** @param {Record<string, unknown>} body */
@@ -447,7 +445,9 @@ export function createDbClient(options) {
                     /* ignore */
                 }
             }
-            return { data: { ...summary, cachedPublicIp } };
+            const lastRun =
+                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
+            return { data: { ...summary, cachedPublicIp, lastRun } };
         },
 
         async deleteDdns() {
@@ -470,7 +470,9 @@ export function createDbClient(options) {
                     /* ignore */
                 }
             }
-            return { data: { ...summary, cachedPublicIp } };
+            const lastRun =
+                typeof persistence.getDdnsLastRun === "function" ? persistence.getDdnsLastRun() : null;
+            return { data: { ...summary, cachedPublicIp, lastRun } };
         }
     };
 }

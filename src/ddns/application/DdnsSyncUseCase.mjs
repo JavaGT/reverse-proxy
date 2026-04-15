@@ -13,12 +13,13 @@ export class DdnsSyncUseCase {
 
     /**
      * @param {string[]} domains - Apex zones to sync (from stored DDNS explicit list or registry apex list)
+     * @returns {Promise<{ outcome: 'success' | 'skipped', detail: string, skippedBecause: string | null }>}
      */
     async execute(domains) {
         const list = domains?.length ? domains : [];
         if (list.length === 0) {
             this.logger.warn({ event: "ddns_no_domains" }, "DDNS: no domains configured; skipping");
-            return;
+            return { outcome: "skipped", detail: "No apex zones configured", skippedBecause: "no_domains" };
         }
 
         this.logger.info({ event: "ddns_sync_start", domains: list }, "--- DDNS sync ---");
@@ -29,13 +30,17 @@ export class DdnsSyncUseCase {
 
             if (!currentIp.hasAtLeastOne) {
                 this.logger.error({ event: "ddns_no_public_ip" }, "No public IPv4 or IPv6 detected; aborting DDNS");
-                return;
+                return {
+                    outcome: "skipped",
+                    detail: "No public IPv4 or IPv6 detected",
+                    skippedBecause: "no_public_ip"
+                };
             }
 
             const cachedIp = await this.ipCache.read();
             if (cachedIp && cachedIp.equals(currentIp)) {
                 this.logger.info({ event: "ddns_ip_unchanged" }, "Public IP unchanged; skipping DNS updates");
-                return;
+                return { outcome: "skipped", detail: "Public IP unchanged", skippedBecause: "ip_unchanged" };
             }
 
             let updateCount = 0;
@@ -62,6 +67,11 @@ export class DdnsSyncUseCase {
 
             await this.ipCache.save(currentIp);
             this.logger.info({ event: "ddns_complete", updateCount }, `DDNS sync completed (${updateCount} update(s))`);
+            return {
+                outcome: "success",
+                detail: `${updateCount} update(s)`,
+                skippedBecause: null
+            };
         } catch (error) {
             this.logger.error({ event: "ddns_failed", error: error.message }, "DDNS sync failed");
             throw error;

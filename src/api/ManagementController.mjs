@@ -14,6 +14,7 @@ import {
 } from "../infrastructure/dns/console/resolveConsoleLinks.mjs";
 import { collectNetworkStatus } from "../infrastructure/network/networkStatus.mjs";
 import { buildDdnsPublicSummary, mergePutDdnsBody } from "../ddns/ddnsConfigResolve.mjs";
+import { runDdnsSyncOnce } from "../ddns/runDdnsSyncOnce.mjs";
 import { SqliteIpCache } from "../ddns/infrastructure/adapters/SqliteIpCache.mjs";
 import { isValidApexFQDN } from "../shared/utils/isValidApexFqdn.mjs";
 import {
@@ -21,6 +22,10 @@ import {
     reserveWithRegistryOutcome,
     subdomainConflictMessage
 } from "./reservationOps.mjs";
+import { deleteManagementAccount, listManagementAccounts } from "./managementAccounts.mjs";
+import { buildPublicSettingsView, SERVER_SETTINGS_RESTART_KEYS } from "../config/serverSettingsRegistry.mjs";
+import { reapplyServerSettingsFromPersistence } from "../config/applyServerSettingsToEnv.mjs";
+import { validateServerSettingsPut } from "../config/validateServerSettingsPut.mjs";
 
 function sendApiError(res, status, code, message, details = null) {
     return sendJsonError(res, status, code, message, details, resolutionForManagementError(code));
@@ -36,17 +41,21 @@ export class ManagementController {
     #registry;
     #persistence;
     #logger;
-    #managementSecret;
     #publicUrlHttpsPrefix;
     #publicUrlHttpPrefix;
     /** @type {(() => void) | null} */
     #onRootDomainsUpdated;
 
-    constructor(registry, persistence, logger, managementSecret = null, publicUrls = null) {
+    /**
+     * @param {*} registry
+     * @param {*} persistence
+     * @param {*} logger
+     * @param {{ publicUrlHttpsPrefix?: string, publicUrlHttpPrefix?: string, onRootDomainsUpdated?: () => void } | null} [publicUrls]
+     */
+    constructor(registry, persistence, logger, publicUrls = null) {
         this.#registry = registry;
         this.#persistence = persistence;
         this.#logger = logger;
-        this.#managementSecret = managementSecret;
         this.#publicUrlHttpsPrefix = publicUrls?.publicUrlHttpsPrefix ?? "https";
         this.#publicUrlHttpPrefix = publicUrls?.publicUrlHttpPrefix ?? "http";
         this.#onRootDomainsUpdated = publicUrls?.onRootDomainsUpdated ?? null;
@@ -64,6 +73,35 @@ export class ManagementController {
             publicUrl: `${this.#publicUrlHttpsPrefix}://${host}`,
             publicUrlHttp: `${this.#publicUrlHttpPrefix}://${host}`
         };
+    }
+
+    /**
+     * DDNS API payload including SQLite public IP cache and last-run telemetry (no secrets).
+     */
+    async #getDdnsDataObject() {
+        const stored =
+            typeof this.#persistence.getDdnsSettings === "function" ? this.#persistence.getDdnsSettings() : null;
+        const summary = buildDdnsPublicSummary({
+            getApexDomains: () => this.#registry.getRootDomains(),
+            stored
+        });
+
+        let cachedPublicIp = null;
+        const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
+        if (typeof getDb === "function") {
+            try {
+                const cache = new SqliteIpCache(getDb());
+                const ip = await cache.read();
+                cachedPublicIp = ip ? ip.toJSON() : null;
+            } catch (err) {
+                this.#logger.warn({ event: "mgmt_ddns_cache_read_error", error: err.message }, "DDNS cache read failed");
+            }
+        }
+
+        const lastRun =
+            typeof this.#persistence.getDdnsLastRun === "function" ? this.#persistence.getDdnsLastRun() : null;
+
+        return { ...summary, cachedPublicIp, lastRun };
     }
 
     getDomains(req, res) {
@@ -210,7 +248,7 @@ export class ManagementController {
 
             const reservationTargets = parseReservationTargets(req.body);
             if (!reservationTargets || (Array.isArray(reservationTargets) && reservationTargets.length === 0)) {
-                return sendApiError(res, 400, "INVALID_REQUEST", "Targets, ports, or target is required", null);
+                return sendApiError(res, 400, "INVALID_REQUEST", "targets, ports, or port is required", null);
             }
 
             const outcome = reserveWithRegistryOutcome(
@@ -317,7 +355,7 @@ export class ManagementController {
                     res,
                     400,
                     "INVALID_REQUEST",
-                    `reservations[${i}]: targets, ports, or target is required`,
+                    `reservations[${i}]: targets, ports, or port is required`,
                     null
                 );
             }
@@ -465,6 +503,128 @@ export class ManagementController {
         res.status(200).json({ data: { status: "OK" } });
     }
 
+    /**
+     * Returns the shared registration secret for `POST /api/v1/auth/register` (`registrationSecret` body field).
+     * Allowed for same-machine operators or signed-in sessions (see ManagementServer `#requireAuth`).
+     */
+    getRegistrationSecret(req, res) {
+        const secret = process.env.MANAGEMENT_REGISTRATION_SECRET?.trim();
+        if (!secret) {
+            res.status(200).json({ data: { configured: false, secret: null } });
+            return;
+        }
+        res.status(200).json({ data: { configured: true, secret } });
+    }
+
+    /**
+     * Effective server settings (SQLite overrides on top of `.env`).
+     */
+    getServerSettings(req, res) {
+        if (typeof this.#persistence.getServerSettings !== "function") {
+            return sendApiError(res, 501, "NOT_IMPLEMENTED", "Server settings require SQLite persistence", null);
+        }
+        try {
+            const sparse = this.#persistence.getServerSettings();
+            const view = buildPublicSettingsView(sparse);
+            res.status(200).json({
+                data: {
+                    ...view,
+                    bootstrapEnvKeys: ["SQLITE_DB_PATH", "NODE_ENV"]
+                }
+            });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_settings_get_error", error: error.message }, "Server settings read failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    /**
+     * Save partial settings to SQLite and merge into the running process (`process.env`).
+     */
+    putServerSettings(req, res) {
+        if (typeof this.#persistence.saveServerSettingsPartial !== "function") {
+            return sendApiError(res, 501, "NOT_IMPLEMENTED", "Server settings require SQLite persistence", null);
+        }
+        const validated = validateServerSettingsPut(req.body);
+        if (!validated.ok) {
+            return sendApiError(res, 400, "INVALID_REQUEST", validated.message, null);
+        }
+        try {
+            this.#persistence.saveServerSettingsPartial(validated.partial);
+            reapplyServerSettingsFromPersistence(this.#persistence);
+            const sparse = this.#persistence.getServerSettings();
+            const view = buildPublicSettingsView(sparse);
+            const changed = Object.keys(validated.partial);
+            const restartRecommended = changed.some(k => validated.partial[k] !== null && SERVER_SETTINGS_RESTART_KEYS.has(k));
+            const clearedRestartish = changed.some(
+                k => validated.partial[k] === null && SERVER_SETTINGS_RESTART_KEYS.has(k)
+            );
+            res.status(200).json({
+                data: {
+                    ...view,
+                    restartRecommended: restartRecommended || clearedRestartish,
+                    notice:
+                        restartRecommended || clearedRestartish
+                            ? "Restart the reverse-proxy process for listener port, TLS directory, health-check interval, session secret, trust proxy, rate limits, or auth data path changes to apply everywhere."
+                            : "Running process updated where possible; trust proxy and rate limits may still require a restart."
+                }
+            });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_settings_put_error", error: error.message }, "Server settings save failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    /**
+     * Lists express-easy-auth accounts (for management UI).
+     */
+    getAccounts(req, res) {
+        try {
+            const accounts = listManagementAccounts();
+            res.status(200).json({ data: { accounts } });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_accounts_list_error", error: error.message }, "Account list failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    /**
+     * Removes an account. Cannot delete own session user or the last remaining account.
+     */
+    deleteAccount(req, res) {
+        const targetId = req.params?.userId?.trim?.() ?? String(req.params?.userId ?? "").trim();
+        if (!targetId) {
+            return sendApiError(res, 400, "INVALID_REQUEST", "userId is required", null);
+        }
+        const selfId = req.session?.userId;
+        if (selfId && selfId === targetId) {
+            return sendApiError(res, 409, "CANNOT_DELETE_SELF", "Cannot delete your own account from this UI", null);
+        }
+        try {
+            const result = deleteManagementAccount(targetId);
+            if (result.ok) {
+                res.status(204).end();
+                return;
+            }
+            if (result.code === "NOT_FOUND") {
+                return sendApiError(res, 404, "ACCOUNT_NOT_FOUND", "No account with that id", null);
+            }
+            if (result.code === "LAST_ACCOUNT") {
+                return sendApiError(
+                    res,
+                    409,
+                    "CANNOT_DELETE_LAST_ACCOUNT",
+                    "Cannot remove the last account; create another user first or use local operator access",
+                    null
+                );
+            }
+            return sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Unexpected delete result", null);
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_accounts_delete_error", error: error.message }, "Account delete failed");
+            sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
     async getNetwork(req, res) {
         try {
             const data = await collectNetworkStatus(this.#registry);
@@ -480,31 +640,8 @@ export class ManagementController {
      */
     async getDdns(req, res) {
         try {
-            const stored =
-                typeof this.#persistence.getDdnsSettings === "function" ? this.#persistence.getDdnsSettings() : null;
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => this.#registry.getRootDomains(),
-                stored
-            });
-
-            let cachedPublicIp = null;
-            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
-            if (typeof getDb === "function") {
-                try {
-                    const cache = new SqliteIpCache(getDb());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch (err) {
-                    this.#logger.warn({ event: "mgmt_ddns_cache_read_error", error: err.message }, "DDNS cache read failed");
-                }
-            }
-
-            res.status(200).json({
-                data: {
-                    ...summary,
-                    cachedPublicIp
-                }
-            });
+            const data = await this.#getDdnsDataObject();
+            res.status(200).json({ data });
         } catch (error) {
             this.#logger.error({ event: "mgmt_ddns_error", error: error.message }, "DDNS summary failed");
             sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
@@ -524,22 +661,8 @@ export class ManagementController {
             this.#persistence.saveDdnsSettings(merged.value);
             this.#logger.info({ event: "mgmt_ddns_saved" }, "DDNS settings saved to SQLite");
 
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => this.#registry.getRootDomains(),
-                stored: this.#persistence.getDdnsSettings()
-            });
-            let cachedPublicIp = null;
-            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
-            if (typeof getDb === "function") {
-                try {
-                    const cache = new SqliteIpCache(getDb());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch {
-                    /* ignore */
-                }
-            }
-            res.status(200).json({ data: { ...summary, cachedPublicIp } });
+            const data = await this.#getDdnsDataObject();
+            res.status(200).json({ data });
         } catch (error) {
             this.#logger.error({ event: "mgmt_ddns_put_error", error: error.message }, "DDNS save failed");
             sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
@@ -554,25 +677,63 @@ export class ManagementController {
             this.#persistence.clearDdnsSettings();
             this.#logger.info({ event: "mgmt_ddns_cleared" }, "DDNS SQLite settings cleared; configure again via PUT /api/v1/ddns or the management UI");
 
-            const summary = buildDdnsPublicSummary({
-                getApexDomains: () => this.#registry.getRootDomains(),
-                stored: null
-            });
-            let cachedPublicIp = null;
-            const getDb = this.#persistence.getDatabaseSync?.bind(this.#persistence);
-            if (typeof getDb === "function") {
-                try {
-                    const cache = new SqliteIpCache(getDb());
-                    const ip = await cache.read();
-                    cachedPublicIp = ip ? ip.toJSON() : null;
-                } catch {
-                    /* ignore */
-                }
-            }
-            res.status(200).json({ data: { ...summary, cachedPublicIp } });
+            const data = await this.#getDdnsDataObject();
+            res.status(200).json({ data });
         } catch (error) {
             this.#logger.error({ event: "mgmt_ddns_delete_error", error: error.message }, "DDNS clear failed");
             sendApiError(res, 500, "INTERNAL_SERVER_ERROR", error.message, null);
+        }
+    }
+
+    /**
+     * Runs one DDNS sync immediately (same logic as the background scheduler). Requires saved SQLite settings.
+     */
+    async postDdnsSync(req, res) {
+        if (
+            typeof this.#persistence.getDdnsSettings !== "function" ||
+            typeof this.#persistence.saveDdnsLastRun !== "function"
+        ) {
+            return sendApiError(
+                res,
+                501,
+                "NOT_IMPLEMENTED",
+                "DDNS sync requires SQLite persistence with last-run telemetry support",
+                null
+            );
+        }
+        try {
+            const stored = this.#persistence.getDdnsSettings();
+            if (!stored) {
+                return sendApiError(
+                    res,
+                    400,
+                    "DDNS_NOT_CONFIGURED",
+                    "Save DDNS settings at least once before running a sync.",
+                    null
+                );
+            }
+
+            const result = await runDdnsSyncOnce({
+                persistence: this.#persistence,
+                getApexDomains: () => this.#registry.getRootDomains(),
+                logger: this.#logger
+            });
+
+            if (!result.ran) {
+                return sendApiError(
+                    res,
+                    400,
+                    "DDNS_SYNC_IDLE",
+                    "DDNS is disabled, credentials are missing, or no zones are configured.",
+                    { reason: result.reason ?? null }
+                );
+            }
+
+            const data = await this.#getDdnsDataObject();
+            res.status(200).json({ data });
+        } catch (error) {
+            this.#logger.error({ event: "mgmt_ddns_sync_error", error: error.message }, "DDNS manual sync failed");
+            sendApiError(res, 500, "DDNS_SYNC_FAILED", error.message, null);
         }
     }
 
@@ -596,9 +757,8 @@ export class ManagementController {
             let instructions = readFileSync(templatePath, "utf-8");
 
             const rootDomain = this.#registry.rootDomain;
-            const authNote = this.#managementSecret
-                ? "When `MANAGEMENT_SECRET` is set in the server environment, mutating endpoints require `Authorization: Bearer <secret>`. Do not commit the secret to source control."
-                : "When `MANAGEMENT_SECRET` is unset, mutating endpoints do not require a bearer token.";
+            const authNote =
+                "Remote clients need a session from `@javagt/express-easy-auth` (sign in at `/login.html` or `POST /api/v1/auth/login`; cookie `mgmt.sid`). Same-machine (local operator) clients skip sign-in: logical loopback, trusted forwarded IPs matching this host, optional `MANAGEMENT_LOCAL_OPERATOR_IPS` / cached public egress (see OpenAPI). All management paths are gated until signed in when not same-machine. WebAuthn `rpID`/`origin` follow the request `Host` (and `X-Forwarded-Proto` behind a proxy); use `MANAGEMENT_TRUST_PROXY=1` when TLS terminates in front of management.";
 
             instructions = instructions
                 .replace(/\{\{rootDomain\}\}/g, rootDomain)

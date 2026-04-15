@@ -24,9 +24,7 @@ function isTransportError(err) {
 /**
  * @param {{
  *   baseUrl: string,
- *   token?: string | null,
  *   dbPath: string,
- *   legacyRouteCacheFile?: string | null,
  *   env?: NodeJS.ProcessEnv,
  *   healthTimeoutMs?: number,
  *   modeCacheTtlMs?: number,
@@ -38,10 +36,9 @@ function isTransportError(err) {
  */
 export function createAutoClient(options) {
     const fetchFn = options.fetch ?? getFetch();
-    const http = createHttpClient({ baseUrl: options.baseUrl, token: options.token, fetch: fetchFn });
+    const http = createHttpClient({ baseUrl: options.baseUrl, fetch: fetchFn });
     const db = createDbClient({
         dbPath: options.dbPath,
-        legacyRouteCacheFile: options.legacyRouteCacheFile,
         env: options.env,
         publicUrlHttpsPrefix: options.publicUrlHttpsPrefix,
         publicUrlHttpPrefix: options.publicUrlHttpPrefix,
@@ -183,6 +180,10 @@ export function createAutoClient(options) {
 
         async deleteDdns() {
             return execHttpOrDb(() => http.deleteDdns(), () => db.deleteDdns());
+        },
+
+        async postDdnsSync() {
+            return execHttpOnly("postDdnsSync", () => http.postDdnsSync());
         },
 
         async getNetwork() {

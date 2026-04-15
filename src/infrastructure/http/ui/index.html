@@ -14,36 +14,7 @@
     <link rel="stylesheet" href="/mgmt.css">
 </head>
 <body>
-    <header class="mgmt-app-bar" role="banner">
-        <div class="mgmt-app-bar-inner">
-            <div class="mgmt-app-brand">
-                <a href="#overview" class="mgmt-app-title">Reverse proxy</a>
-                <span class="mgmt-app-tagline">Management · 127.0.0.1</span>
-            </div>
-            <div class="mgmt-app-tools">
-                <label for="mgmt-secret">Bearer</label>
-                <input type="password" id="mgmt-secret" autocomplete="off" placeholder="if required" size="14">
-                <span class="mgmt-theme-label">Theme</span>
-                <button type="button" class="mgmt-btn mgmt-theme-cycle" id="theme-cycle-btn">System</button>
-                <button type="button" class="mgmt-btn" id="open-help" title="Help (?)">Help</button>
-                <button type="button" class="mgmt-btn mgmt-btn-primary" id="refresh-all">Refresh</button>
-            </div>
-            <nav class="mgmt-app-nav" aria-label="Page sections">
-                <span class="mgmt-app-nav-main">
-                    <a href="#overview">Overview</a>
-                    <a href="#routes">Routes</a>
-                    <a href="#domains">Domains</a>
-                    <a href="#network">Network</a>
-                    <a href="#scanner">Scanner</a>
-                    <a href="#api">API</a>
-                </span>
-                <span class="mgmt-app-nav-divider" aria-hidden="true">|</span>
-                <span class="mgmt-app-nav-external">
-                    <a href="ddns.html" class="mgmt-app-nav-ddns" title="DDNS settings (separate page)">DDNS</a>
-                </span>
-            </nav>
-        </div>
-    </header>
+    <rp-mgmt-header tagline="Management · 127.0.0.1" brand-href="#overview" section-links="hash" tools="signout,theme,help,refresh" current="none"></rp-mgmt-header>
 
     <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
         <div class="mgmt-help">
@@ -52,7 +23,7 @@
                 <p class="mgmt-help-p">Each row is one IP on a network interface (from the OS). Loopback is only for this machine; LAN/private addresses are how other devices on your network reach this host.</p>
                 <div class="mgmt-table-collapsible mgmt-table-collapsed">
                     <div class="mgmt-table-collapsible-bar">
-                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-help">Expand</button>
+                        <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-help">Show table</button>
                     </div>
                     <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-help">
                         <div class="mgmt-table-wrap mgmt-help-table-wrap">
@@ -86,13 +57,18 @@
         </div>
     </rp-mgmt-modal>
 
-    <div class="mgmt-page">
+    <main id="main-content" class="mgmt-page">
         <section id="overview" class="mgmt-section">
             <h2>Overview</h2>
             <p class="mgmt-p">
-                Routes, apex domains, reservations, port scan — SQLite on the server. <button type="button" class="mgmt-inline-help" id="open-help-inline">Help</button> explains Network columns (local vs public IP, DNS).
+                Manage routes, apex domains, network status, and port scans for this host. Use <button type="button" class="mgmt-inline-help" id="open-help-inline">Help</button> for column meanings.
             </p>
-            <p class="mgmt-p mgmt-note"><a href="ddns.html">DDNS settings</a> (Porkbun) live on a separate page. When enabled in SQLite, a background schedule syncs DNS; it does not replace TLS or route registration.</p>
+            <details class="mgmt-details">
+                <summary>More about data storage and other pages</summary>
+                <div class="mgmt-details-body">
+                    <p class="mgmt-p mgmt-note" style="margin-top:0">Configuration is stored in SQLite on the server. <a href="settings.html">Server settings</a> holds environment overrides, <a href="accounts.html">Accounts</a> covers users and invites, and <a href="ddns.html">DDNS</a> configures Porkbun updates. When DDNS is enabled, a background job syncs DNS; it does not replace TLS certificates or route registration.</p>
+                </div>
+            </details>
         </section>
 
         <section id="routes" class="mgmt-section">
@@ -113,12 +89,15 @@
         </section>
 
         <section id="api" class="mgmt-section">
-            <h2>API notes</h2>
-            <p class="mgmt-p">OpenAPI: <a href="/api/v1/openapi.yaml"><code>GET /api/v1/openapi.yaml</code></a> (same as <a href="/openapi.yaml"><code>GET /openapi.yaml</code></a>) · Human docs: <a href="/llms.txt"><code>GET /llms.txt</code></a> (includes the official Node client). JSON errors include <code>error.resolution</code> with fix hints.</p>
-            <p class="mgmt-p">Node integrations: install <a href="https://www.npmjs.com/package/@javagt/reverse-proxy-client" rel="noopener noreferrer"><code>@javagt/reverse-proxy-client</code></a> from npm for <code>createHttpClient</code>, optional SQLite fallback, and the <code>reverse-proxy-mgmt</code> CLI (see <code>llms.txt</code>, section <em>Official Node.js client</em>).</p>
+            <h2>API</h2>
+            <p class="mgmt-p">OpenAPI: <a href="/api/v1/openapi.yaml"><code>GET /api/v1/openapi.yaml</code></a> · Human-oriented notes: <a href="/llms.txt"><code>GET /llms.txt</code></a>. Errors include <code>error.resolution</code> hints.</p>
+            <details class="mgmt-details">
+                <summary>Node client and endpoint list</summary>
+                <div class="mgmt-details-body">
+                    <p class="mgmt-p mgmt-note" style="margin-top:0">Install <a href="https://www.npmjs.com/package/@javagt/reverse-proxy-client" rel="noopener noreferrer"><code>@javagt/reverse-proxy-client</code></a> for <code>createHttpClient</code>, optional SQLite access, and the <code>reverse-proxy-mgmt</code> CLI (see <code>llms.txt</code>).</p>
             <div class="mgmt-table-collapsible mgmt-table-collapsed">
                 <div class="mgmt-table-collapsible-bar">
-                    <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-api">Expand</button>
+                    <button type="button" class="mgmt-btn mgmt-table-toggle" aria-expanded="false" aria-controls="mgmt-coll-static-api">Show table</button>
                 </div>
                 <div class="mgmt-table-collapsible-body" id="mgmt-coll-static-api">
                     <div class="mgmt-table-wrap">
@@ -130,22 +109,28 @@
                                 <tr><td><code>GET /api/v1/health</code> / <code>GET /api/v1/status</code></td><td>Control plane liveness</td></tr>
                                 <tr><td><code>GET /api/v1/network</code></td><td>Local and public IPs; DNS for apexes and catch-all probes only (not per-route)</td></tr>
                                 <tr><td><code>GET /api/v1/ddns</code></td><td>Porkbun DDNS status from SQLite; last cached public IP</td></tr>
-                                <tr><td><code>PUT /api/v1/ddns</code></td><td>Save DDNS to SQLite (localhost + bearer); scheduler picks up without restart</td></tr>
+                                <tr><td><code>PUT /api/v1/ddns</code></td><td>Save DDNS to SQLite (TCP peer must be localhost; remote clients need a session); scheduler picks up without restart</td></tr>
                                 <tr><td><code>DELETE /api/v1/ddns</code></td><td>Remove saved DDNS configuration from SQLite</td></tr>
                                 <tr><td><code>GET /api/v1/domains</code></td><td>List apex domains (primary + all)</td></tr>
-                                <tr><td><code>PUT /api/v1/domains</code></td><td>Replace apex list (SQLite); first entry is primary</td></tr>
+                                <tr><td><code>PUT /api/v1/domains</code></td><td>Replace apex list (SQLite); optional <code>dnsConsole</code> for registrar links; first entry is primary</td></tr>
                                 <tr><td><code>GET /api/v1/routes</code></td><td>List routes with <code>publicUrl</code> / <code>baseDomain</code></td></tr>
                                 <tr><td><code>POST /api/v1/reserve</code></td><td>Body requires <code>baseDomain</code>; optional <code>reservations</code> array for batch</td></tr>
                                 <tr><td><code>DELETE /api/v1/reserve/:subdomain?baseDomain=…</code></td><td>Release; <code>baseDomain</code> required</td></tr>
                                 <tr><td><code>POST /api/v1/scan</code></td><td>Optional JSON <code>start</code>, <code>end</code>, <code>concurrency</code>; inclusive range size 1–10000</td></tr>
-                                <tr><td><code>DELETE /api/v1/process/:port</code></td><td>Stop process listening on TCP port (localhost + bearer when configured)</td></tr>
+                                <tr><td><code>DELETE /api/v1/process/:port</code></td><td>Stop process listening on TCP port (localhost binding; remote clients need a session)</td></tr>
+                                <tr><td><code>GET /api/v1/accounts</code></td><td>List management users (see <a href="accounts.html">Accounts</a>)</td></tr>
+                                <tr><td><code>DELETE /api/v1/accounts/:userId</code></td><td>Remove a user (not yourself; not the last account)</td></tr>
+                                <tr><td><code>GET /api/v1/settings</code></td><td>Effective server settings (SQLite + <code>.env</code>); see <a href="settings.html">Settings</a></td></tr>
+                                <tr><td><code>PUT /api/v1/settings</code></td><td>Update settings in SQLite (localhost TCP + session); restart may be required</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
+                </div>
+            </details>
         </section>
-    </div>
+    </main>
 
     <script type="module" src="/mgmt-app.mjs"></script>
 </body>

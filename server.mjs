@@ -1,6 +1,6 @@
 import http from "node:http";
 import https from "node:https";
-import { loadEnvFile } from "node:process";
+import "./src/config/applyServerSettingsToEnv.mjs";
 import { ProxyService } from "./src/infrastructure/http/ProxyService.mjs";
 import { ManagementController } from "./src/api/ManagementController.mjs";
 import { ManagementServer } from "./src/infrastructure/http/ManagementServer.mjs";
@@ -8,22 +8,13 @@ import { SqlitePersistence } from "./src/infrastructure/persistence/SqlitePersis
 import { TlsService } from "./src/infrastructure/tls/TlsService.mjs";
 import { HealthCheckService } from "./src/infrastructure/http/HealthCheckService.mjs";
 import { startDdnsScheduler } from "./src/ddns/infrastructure/DdnsScheduler.mjs";
-import { hasLegacyDdnsEnvVars } from "./src/ddns/ddnsConfigResolve.mjs";
 import { logger } from "./src/shared/utils/Logger.mjs";
 import { hydrateRegistryFromPersistence } from "./src/management/bootstrapFromPersistence.mjs";
 
-try {
-    loadEnvFile(".env");
-} catch (err) {
-    if (err?.code !== "ENOENT") throw err;
-}
-
 const TLS_CERT_DIR = process.env.TLS_CERT_DIR;
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || "./reverse-proxy.db";
-const LEGACY_ROUTE_CACHE = process.env.ROUTE_CACHE_FILE || "./route-cache.json";
 const MANAGEMENT_SUBDOMAIN = process.env.MANAGEMENT_SUBDOMAIN || "reverse-proxy";
 const MANAGEMENT_BASE_DOMAIN = process.env.MANAGEMENT_BASE_DOMAIN || null;
-const MANAGEMENT_SECRET = normalizeManagementSecret(process.env.MANAGEMENT_SECRET);
 const MANAGEMENT_INTERFACE_PORT = parseManagementInterfacePort(process.env.MANAGEMENT_INTERFACE_PORT);
 const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || "30000", 10);
 const PUBLIC_URL_HTTPS_PREFIX = process.env.PUBLIC_URL_HTTPS_PREFIX || "https";
@@ -34,9 +25,7 @@ if (!TLS_CERT_DIR) {
     process.exit(1);
 }
 
-const persistence = new SqlitePersistence(SQLITE_DB_PATH, {
-    legacyRouteCacheFile: LEGACY_ROUTE_CACHE
-});
+const persistence = new SqlitePersistence(SQLITE_DB_PATH);
 
 const buildExtraHeaders = req => ({
     "x-forwarded-for": req.socket.remoteAddress,
@@ -45,12 +34,6 @@ const buildExtraHeaders = req => ({
 
 /** @type {() => void} */
 let stopDdns = () => {};
-
-function normalizeManagementSecret(raw) {
-    if (raw == null) return null;
-    const s = String(raw).trim();
-    return s.length > 0 ? s : null;
-}
 
 /** Default 24789; invalid values fall back to 24789. */
 function parseManagementInterfacePort(raw) {
@@ -73,7 +56,7 @@ async function main() {
         });
 
         let managementServer;
-        const controller = new ManagementController(registry, persistence, logger, MANAGEMENT_SECRET, {
+        const controller = new ManagementController(registry, persistence, logger, {
             publicUrlHttpsPrefix: PUBLIC_URL_HTTPS_PREFIX,
             publicUrlHttpPrefix: PUBLIC_URL_HTTP_PREFIX,
             onRootDomainsUpdated: () => managementServer?.refreshManagementRoute()
@@ -85,21 +68,14 @@ async function main() {
             () => (MANAGEMENT_BASE_DOMAIN && String(MANAGEMENT_BASE_DOMAIN).trim()) || registry.rootDomain,
             controller,
             logger,
-            MANAGEMENT_SECRET,
-            MANAGEMENT_INTERFACE_PORT
+            MANAGEMENT_INTERFACE_PORT,
+            { sqliteDbPath: SQLITE_DB_PATH }
         );
 
         const proxyService = new ProxyService(registry, buildExtraHeaders, logger);
         const healthCheckService = new HealthCheckService(registry, logger, HEALTH_CHECK_INTERVAL_MS);
 
         logger.info({ count: registry.getPersistentRoutes().length }, "Route registry hydrated from SQLite");
-
-        if (hasLegacyDdnsEnvVars(process.env)) {
-            logger.warn(
-                { event: "ddns_legacy_env_ignored" },
-                "DDNS is configured only in SQLite (management UI / PUT /api/v1/ddns). Legacy DDNS_* / PORKBUN_* / API_KEY / SECRET_KEY env vars are ignored."
-            );
-        }
 
         await tlsService.start();
         healthCheckService.start();
@@ -129,19 +105,50 @@ async function main() {
         httpServer.listen(80, () => logger.info("HTTP Redirect Server listening on port 80"));
         httpsServer.listen(443, () => logger.info("HTTPS Proxy Server listening on port 443"));
 
+        let shutdownInvocation = 0;
         const shutdown = async signal => {
+            const t0 = Date.now();
+            const invocation = ++shutdownInvocation;
+            /** @param {string} message @param {string} hypothesisId @param {Record<string, unknown>} [extra] */
+            const dbg = (message, hypothesisId, extra = {}) => {
+                // #region agent log
+                fetch("http://127.0.0.1:7264/ingest/41b103da-6258-4e05-b5ff-6d1a76fe4cff", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "bfb84f" },
+                    body: JSON.stringify({
+                        sessionId: "bfb84f",
+                        runId: "pre-fix",
+                        hypothesisId,
+                        location: "server.mjs:shutdown",
+                        message,
+                        data: { signal, invocation, ms: Date.now() - t0, ...extra },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+                // #endregion
+            };
+
+            dbg("shutdown_enter", "A");
+
             logger.info({ signal }, "Shutdown signal received. Closing servers...");
 
             stopDdns();
+            dbg("after_stopDdns", "E");
             healthCheckService.stop();
             tlsService.stop();
+            dbg("after_sync_stops_before_management", "D");
+
             await managementServer.stop();
+            dbg("after_management_stop", "B");
 
             httpServer.close();
+            dbg("after_http_close_called", "C");
             httpsServer.close(() => {
+                dbg("https_close_callback", "C", { totalMs: Date.now() - t0 });
                 logger.info("HTTPS Proxy Server closed. Exiting.");
                 process.exit(0);
             });
+            dbg("after_https_close_called", "C");
 
             setTimeout(() => {
                 logger.error("Could not close connections in time, forceful exit.");
@@ -152,7 +159,7 @@ async function main() {
         process.on("SIGTERM", () => shutdown("SIGTERM"));
         process.on("SIGINT", () => shutdown("SIGINT"));
     } catch (err) {
-        logger.error({ error: err.message }, "Failed to start server");
+        logger.error({ err, event: "server_start_failed" }, "Failed to start server");
         process.exit(1);
     }
 }

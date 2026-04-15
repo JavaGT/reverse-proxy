@@ -1,0 +1,16 @@
+{
+  "name": "reverse-proxy-hello-world-example",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal app that registers a subdomain on the local reverse-proxy management API",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "@javagt/reverse-proxy-client": "file:../../packages/reverse-proxy-client"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

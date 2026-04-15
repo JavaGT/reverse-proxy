@@ -1,9 +1,5 @@
-import { PorkbunDnsProvider } from "./adapters/PorkbunDnsProvider.mjs";
-import { HttpIpLookup } from "./adapters/HttpIpLookup.mjs";
-import { SqliteIpCache } from "./adapters/SqliteIpCache.mjs";
-import { SyncService } from "../domain/services/SyncService.mjs";
-import { DdnsSyncUseCase } from "../application/DdnsSyncUseCase.mjs";
 import { getRuntimeDdnsTick } from "../ddnsConfigResolve.mjs";
+import { runDdnsSyncOnce } from "../runDdnsSyncOnce.mjs";
 
 /**
  * Wires DDNS: reloads config from SQLite on each cycle so management UI changes apply without restart.
@@ -12,10 +8,6 @@ import { getRuntimeDdnsTick } from "../ddnsConfigResolve.mjs";
  */
 export function startDdnsScheduler(ctx) {
     const { persistence, logger, getApexDomains } = ctx;
-
-    const db = persistence.getDatabaseSync();
-    const ipCache = new SqliteIpCache(db);
-    const syncService = new SyncService();
 
     let stopped = false;
     let timeoutId = null;
@@ -57,31 +49,8 @@ export function startDdnsScheduler(ctx) {
         }
 
         if (tick.shouldRun && tick.apiKey && tick.secretKey && tick.domains?.length) {
-            const dnsProvider = new PorkbunDnsProvider({
-                apiKey: tick.apiKey,
-                secretKey: tick.secretKey,
-                apiBaseUrl: tick.porkbunApiBaseUrl,
-                logger
-            });
-
-            const ipLookup = new HttpIpLookup({
-                ipv4Services: tick.ipv4Services,
-                ipv6Services: tick.ipv6Services,
-                timeoutMs: tick.ipLookupTimeoutMs ?? 8000,
-                logger
-            });
-
-            const useCase = new DdnsSyncUseCase({
-                dnsProvider,
-                ipLookup,
-                ipCache,
-                syncService,
-                logger,
-                matchNote: tick.matchNote
-            });
-
             try {
-                await useCase.execute(tick.domains);
+                await runDdnsSyncOnce({ persistence, getApexDomains, logger });
             } catch (err) {
                 logger.error({ event: "ddns_interval_error", err: err.message }, err.stack);
             }

@@ -5,7 +5,6 @@ import {
     DEFAULT_IPV4_SERVICES,
     DEFAULT_PORKBUN_API_BASE_URL,
     getRuntimeDdnsTick,
-    hasLegacyDdnsEnvVars,
     mergePutDdnsBody,
     parseStoredDdnsRow
 } from "../../src/ddns/ddnsConfigResolve.mjs";
@@ -145,8 +144,3 @@ test("parseStoredDdnsRow rejects bad ipv4 URL", () => {
     assert.strictEqual(r.ok, false);
 });
 
-test("hasLegacyDdnsEnvVars detects legacy keys", () => {
-    assert.strictEqual(hasLegacyDdnsEnvVars({}), false);
-    assert.strictEqual(hasLegacyDdnsEnvVars({ DDNS_ENABLED: "true" }), true);
-    assert.strictEqual(hasLegacyDdnsEnvVars({ PORKBUN_API_KEY: "x" }), true);
-});

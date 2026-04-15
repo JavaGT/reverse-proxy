@@ -17,19 +17,11 @@ export class RouteRegistry {
 
     /**
      * @param {string} primaryRootDomain - Primary apex (first in ordered list; callers still pass baseDomain on reserve/release)
-     * @param {string[] | { additionalRootDomains?: string[], reservedHosts?: string[] }} [reservedHostsOrOptions]
-     *        Legacy: second arg is reservedHosts array. New: options object.
+     * @param {{ additionalRootDomains?: string[], reservedHosts?: string[] }} [options]
      */
-    constructor(primaryRootDomain, reservedHostsOrOptions = []) {
-        let reservedHosts = [];
-        let additionalRootDomains = [];
-
-        if (Array.isArray(reservedHostsOrOptions)) {
-            reservedHosts = reservedHostsOrOptions;
-        } else if (reservedHostsOrOptions && typeof reservedHostsOrOptions === "object") {
-            reservedHosts = reservedHostsOrOptions.reservedHosts ?? [];
-            additionalRootDomains = reservedHostsOrOptions.additionalRootDomains ?? [];
-        }
+    constructor(primaryRootDomain, options = {}) {
+        const reservedHosts = options.reservedHosts ?? [];
+        const additionalRootDomains = options.additionalRootDomains ?? [];
 
         this.#primaryRootDomain = String(primaryRootDomain ?? "")
             .trim()
@@ -307,17 +299,12 @@ export class RouteRegistry {
     hydrate(routes) {
         this.#persistentRoutes.clear();
         this.#counters.clear();
-        for (const { host, targets, target, options = {} } of routes) {
+        for (const route of routes) {
+            const { host, targets, options = {} } = route;
             if (this.#reservedHosts.has(host)) continue;
+            if (!host || !Array.isArray(targets) || targets.length === 0) continue;
 
-            let normalizedTargets = [];
-            if (targets) {
-                normalizedTargets = targets;
-            } else if (target) {
-                normalizedTargets = [{ url: target, healthy: true }];
-            }
-
-            this.#persistentRoutes.set(host, { targets: normalizedTargets, options });
+            this.#persistentRoutes.set(host, { targets, options });
         }
     }
 

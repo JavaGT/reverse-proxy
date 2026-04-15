@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounts · Reverse proxy</title>
+    <script>
+        (function () {
+            var t = localStorage.getItem("mgmt_theme");
+            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+            else if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        })();
+    </script>
+    <link rel="stylesheet" href="/mgmt.css">
+</head>
+<body>
+    <rp-mgmt-header tagline="Accounts · 127.0.0.1" brand-href="index.html#overview" tools="signout,theme,help,refresh" current="accounts"></rp-mgmt-header>
+
+    <rp-mgmt-modal id="help-modal" title="Help" density="compact" label="help-modal-title">
+        <div class="mgmt-help">
+            <section class="mgmt-help-section">
+                <h3 class="mgmt-help-h">Accounts</h3>
+                <p class="mgmt-help-p">The <strong>invite secret</strong> is the same value as <code>MANAGEMENT_REGISTRATION_SECRET</code> on the server. Share it only with people who should create an account at <code>/register.html</code>. The field is masked; use <strong>Copy</strong> to place it on the clipboard.</p>
+                <p class="mgmt-help-p">Deleting a user removes their sessions and passkeys. You cannot delete your own account while signed in, or the only remaining user.</p>
+                <p class="mgmt-help-p"><strong>Your sign-in security</strong> uses the same APIs as <code>/login.html</code>: TOTP 2FA (QR setup, recovery codes) and WebAuthn passkeys. Turning off 2FA may require your password if your session is no longer &ldquo;fresh&rdquo;.</p>
+            </section>
+        </div>
+        <div slot="footer">
+            <button type="button" class="mgmt-btn mgmt-btn-primary" id="help-modal-close">Close</button>
+        </div>
+    </rp-mgmt-modal>
+
+    <main id="main-content" class="mgmt-page">
+        <rp-accounts-app></rp-accounts-app>
+    </main>
+
+    <script type="module" src="/mgmt-app.mjs"></script>
+</body>
+</html>

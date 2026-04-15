@@ -10,7 +10,6 @@ export function parseReservationTargets(body) {
     if (!reservationTargets) {
         if (body.ports) reservationTargets = body.ports;
         else if (body.port !== undefined && body.port !== null) reservationTargets = [body.port];
-        else if (body.target) reservationTargets = [body.target];
     }
     return reservationTargets;
 }

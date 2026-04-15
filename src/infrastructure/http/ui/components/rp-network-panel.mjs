@@ -82,7 +82,7 @@ export class RpNetworkPanel extends HTMLElement {
                     st
                 )} · <code>${u}</code>${errTail}</td></tr>`;
             };
-            const ingressSelfCheckTable = wrapCollapsibleTable(`<div class="mgmt-table-wrap">
+            const ingressSelfCheckTable = `<div class="mgmt-table-wrap">
                     <table class="mgmt-table mgmt-network-meta">
                         <tbody>
                             <tr><th scope="row">Probe port</th><td><code>${escapeHtml(String(probePort))}</code></td></tr>
@@ -90,11 +90,11 @@ export class RpNetworkPanel extends HTMLElement {
                             ${formatIngressRow("IPv6", pic.ipv6)}
                         </tbody>
                     </table>
-                </div>`);
+                </div>`;
 
             this.innerHTML = `
                 <rp-panel-toolbar heading="Network &amp; DNS"></rp-panel-toolbar>
-                <p class="mgmt-p mgmt-note">Public IP (HTTP lookup), local interfaces, DNS (apex + catch-all probe per zone; route hostnames are in Routes). <button type="button" class="mgmt-inline-help" data-open-help>Help</button></p>
+                <p class="mgmt-p mgmt-note">Public IP, local interfaces, and DNS (apex + catch-all probes). Route hostnames stay under Routes. <button type="button" class="mgmt-inline-help" data-open-help>Help</button></p>
                 ${gen}
                 <h3 class="mgmt-h3">Public IP (Internet)</h3>
                 ${wrapCollapsibleTable(`<div class="mgmt-table-wrap">
@@ -118,10 +118,16 @@ export class RpNetworkPanel extends HTMLElement {
                         ? `<p class="mgmt-p mgmt-note">${escapeHtml(data.cgnatNote)}</p>`
                         : ""
                 }
-                <h3 class="mgmt-h3">Port forward / hairpin check</h3>
-                <p class="mgmt-p mgmt-note">The server tries <code>GET</code> on its own reported public IPv4 and IPv6 over HTTPS (default port ${probePort}; set <code>PUBLIC_INGRESS_PROBE_HTTPS_PORT</code> / <code>PUBLIC_INGRESS_PROBE_TIMEOUT_MS</code> in the server environment). TLS certificate validation is turned off for this probe only, because certificates are issued for hostnames rather than bare IPs. Any completed TLS response (including HTTP 404 from this proxy) counts as reachable.</p>
-                ${ingressSelfCheckTable}
-                <p class="mgmt-p mgmt-note">If this fails but DNS and services work from a phone on cellular data, the router may not support hairpin NAT (loopback). If no public IPv4 appears above, review the CGNAT note when shown.</p>
+                <details class="mgmt-details">
+                    <summary>Advanced: public ingress self-check (port forward / hairpin)</summary>
+                    <div class="mgmt-details-body">
+                        <p class="mgmt-p mgmt-note" style="margin-top:0">The server runs <code>GET</code> against its own public IPv4/IPv6 over HTTPS (port <code>${escapeHtml(
+                            String(probePort)
+                        )}</code>; tune with <code>PUBLIC_INGRESS_PROBE_HTTPS_PORT</code> / <code>PUBLIC_INGRESS_PROBE_TIMEOUT_MS</code>). Certificate validation is skipped for this probe only. Any completed TLS response (including HTTP 404 from this proxy) counts as reachable.</p>
+                        ${ingressSelfCheckTable}
+                        <p class="mgmt-p mgmt-note">If this fails but services work from cellular data, hairpin NAT may be off. If no public IPv4 appears above, see any CGNAT note.</p>
+                    </div>
+                </details>
                 <h3 class="mgmt-h3">Local addresses</h3>
                 ${wrapCollapsibleTable(`<div class="mgmt-table-wrap">
                     <table class="mgmt-table">
