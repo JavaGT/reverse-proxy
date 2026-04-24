@@ -1,5 +1,5 @@
 {
-  "private": true,
+  
   "workspaces": [
     "packages/*"
   ],
@@ -31,6 +31,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/JavaGT/reverse-proxy.git"
+    "url": "https://github.com/JavaGT/javagt-reverse-proxy.git"
   }
 }
