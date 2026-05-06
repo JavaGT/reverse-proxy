@@ -1,10 +1,11 @@
 import http from 'http'
-import { URL } from 'url'
 
 export function startHealthCheckTask(registry, intervalMs, logger) {
   const interval = setInterval(() => {
     for (const service of registry.findServicesWithHealthCheck()) {
-      const url = new URL(service.healthCheckUrl)
+      const url = service.healthCheckUrl.startsWith('http')
+        ? service.healthCheckUrl
+        : `http://127.0.0.1:${service.port}${service.healthCheckUrl.startsWith('/') ? '' : '/'}${service.healthCheckUrl}`
       const req = http.get(url, (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           service.lastHeartbeat = Date.now()

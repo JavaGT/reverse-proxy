@@ -1,5 +1,5 @@
 export async function deregisterHandler(request, reply) {
-  const { host, subdomain } = request.body
+  const { host, subdomain } = request.body || {}
   const key = host || subdomain
 
   if (!key) {
