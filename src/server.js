@@ -31,6 +31,14 @@ export function buildServer(registry) {
   const fastify = Fastify({ logger: true })
   fastify.decorate('registry', registry)
   fastify.register(websocket)
+  fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'buffer' }, (req, body, done) => {
+    try {
+      const params = new URLSearchParams(body.toString())
+      const parsed = {}
+      for (const [key, val] of params) parsed[key] = val
+      done(null, parsed)
+    } catch (err) { done(err) }
+  })
   addRoutes(fastify)
   return fastify
 }

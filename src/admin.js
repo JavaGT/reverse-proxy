@@ -50,33 +50,36 @@ form input:focus, form select:focus { outline: none; border-color: #3b82f6; }
 <button class="btn btn-primary" type="submit">Register</button>
 </form>
 <script>
-const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s)
-const msg = (text, type) => { $('#msg').textContent = text; $('#msg').className = type || ''; setTimeout(() => $('#msg').className = '', 3000) }
+const msg = (text, type) => { const el = document.getElementById('msg'); el.textContent = text; el.className = type || ''; setTimeout(() => el.className = '', 3000) }
 
 async function load() {
-  const res = await fetch('/api/services')
-  const data = await res.json()
-  const tbody = $('#services')
-  const entries = data.services ? Object.entries(data.services) : []
-  if (entries.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No services registered</td></tr>'; return }
-  tbody.innerHTML = entries.map(([host, svc]) => {
-    const isHeartbeat = svc.heartbeat
-    const isAlive = isHeartbeat && svc.lastHeartbeat && (Date.now() - svc.lastHeartbeat < 60000)
-    const status = isHeartbeat ? (isAlive ? 'alive' : 'stale') : '—'
-    const type = isHeartbeat ? 'heartbeat' : 'permaclaim'
-    const tag = (c, t) => '<span class="tag tag-' + c + '">' + t + '</span>'
-    const lastHb = svc.lastHeartbeat ? new Date(svc.lastHeartbeat).toLocaleString() : '—'
-    return '<tr><td>' + host + '</td><td>' + svc.port + '</td><td>' + tag(type, type) + '</td><td>' + tag(status, status) + '</td><td>' + lastHb + '</td><td><button class="btn btn-danger" onclick="deregister(\'' + host + '\')">Remove</button></td></tr>'
-  }).join('')
+  try {
+    const res = await fetch('/api/services')
+    if (!res.ok) { document.getElementById('services').innerHTML = '<tr><td colspan="6" class="error">Failed to load: ' + res.status + '</td></tr>'; return }
+    const data = await res.json()
+    const tbody = document.getElementById('services')
+    const entries = data.services ? Object.entries(data.services) : []
+    if (entries.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No services registered</td></tr>'; return }
+    tbody.innerHTML = entries.map(([host, svc]) => {
+      const isHeartbeat = svc.heartbeat
+      const isAlive = isHeartbeat && svc.lastHeartbeat && (Date.now() - svc.lastHeartbeat < 60000)
+      return '<tr><td>' + host + '</td><td>' + svc.port + '</td><td><span class="tag tag-' + (isHeartbeat ? 'heartbeat' : 'permaclaim') + '">' + (isHeartbeat ? 'heartbeat' : 'permaclaim') + '</span></td><td><span class="tag tag-' + (isAlive ? 'alive' : 'stale') + '">' + (isAlive ? 'alive' : 'stale') + '</span></td><td>' + (svc.lastHeartbeat ? new Date(svc.lastHeartbeat).toLocaleString() : '\u2014') + '</td><td><button class="btn btn-danger" data-host="' + host.replace(/"/g, '&quot;') + '">Remove</button></td></tr>'
+    }).join('')
+  } catch (err) {
+    document.getElementById('services').innerHTML = '<tr><td colspan="6" class="error">Error: ' + err.message + '</td></tr>'
+  }
 }
 
-async function deregister(host) {
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-danger')
+  if (!btn) return
+  const host = btn.getAttribute('data-host')
   await fetch('/api/deregister', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host }) })
   msg('Deregistered ' + host, 'success')
   load()
-}
+})
 
-$('#register-form').addEventListener('submit', async (e) => {
+document.getElementById('register-form').addEventListener('submit', async (e) => {
   e.preventDefault()
   const fd = new FormData(e.target)
   const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: fd.get('host'), port: Number(fd.get('port')), heartbeat: fd.get('heartbeat') === 'true' }) })

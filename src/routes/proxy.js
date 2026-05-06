@@ -53,7 +53,7 @@ async function proxyHttp(request, reply, service) {
       proxyReq.write(raw)
       proxyReq.end()
     } else {
-      proxyReq.end()
+      request.raw.pipe(proxyReq)
     }
 
     reply.raw.on('close', () => {
