@@ -38,6 +38,14 @@ reverse-proxy start [options]
 | `--ttl` | `TTL_MS` | `30000` |
 | `--cleanup-interval` | `CLEANUP_INTERVAL_MS` | `5000` |
 
+### Admin UI
+
+A local-only dashboard is available at `http://127.0.0.1:9090` (bound to localhost only — not accessible from the network). Shows registered services, status, heartbeats, and lets you register/deregister.
+
+```bash
+reverse-proxy start --admin-port 9090
+```
+
 ### Manage services
 
 ```bash
@@ -76,6 +84,7 @@ reverse-proxy services --proxy-url http://192.168.1.100:9080 --api-key my-secret
 | `TTL_MS` | `30000` | Heartbeat TTL in milliseconds |
 | `CLEANUP_INTERVAL_MS` | `5000` | Stale service cleanup interval |
 | `HEALTH_CHECK_INTERVAL_MS` | `15000` | Health check polling interval |
+| `PROXY_ADMIN_PORT` | `9090` | Local-only admin UI port |
 
 ## SDK
 
