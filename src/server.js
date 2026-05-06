@@ -24,7 +24,7 @@ function addRoutes(fastify) {
   fastify.delete('/deregister', { preHandler: apiKeyAuth }, deregisterHandler)
   fastify.get('/services', { preHandler: apiKeyAuth }, servicesHandler)
 
-  fastify.get('/*', proxyHandler)
+  fastify.all('/*', proxyHandler)
 }
 
 export function buildServer(registry) {

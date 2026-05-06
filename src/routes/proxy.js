@@ -21,6 +21,7 @@ export async function proxyHandler(request, reply) {
 
 async function proxyHttp(request, reply, service) {
   const originalHost = request.headers.host
+  const isGet = request.method === 'GET' || request.method === 'HEAD'
   const options = {
     hostname: '127.0.0.1',
     port: service.port,
@@ -35,11 +36,25 @@ async function proxyHttp(request, reply, service) {
 
   return new Promise((resolve, reject) => {
     const proxyReq = http.request(options, (proxyRes) => {
-      reply.code(proxyRes.statusCode).send(proxyRes)
+      const hopByHop = ['transfer-encoding', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'upgrade']
+      const headers = {}
+      for (const [key, val] of Object.entries(proxyRes.headers)) {
+        if (!hopByHop.includes(key)) headers[key] = val
+      }
+      reply.code(proxyRes.statusCode).headers(headers).send(proxyRes)
     })
 
     proxyReq.on('error', reject)
-    request.raw.pipe(proxyReq)
+
+    if (isGet) {
+      proxyReq.end()
+    } else if (request.body) {
+      const raw = typeof request.body === 'string' ? request.body : JSON.stringify(request.body)
+      proxyReq.write(raw)
+      proxyReq.end()
+    } else {
+      proxyReq.end()
+    }
 
     reply.raw.on('close', () => {
       proxyReq.destroy()
