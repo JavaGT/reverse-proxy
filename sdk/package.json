@@ -1,0 +1,23 @@
+{
+  "name": "reverse-proxy-sdk",
+  "version": "1.0.0",
+  "description": "SDK for reverse-proxy — register, heartbeat, and deregister backend services",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": ["reverse-proxy", "service-registration", "heartbeat", "sdk"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/javagrant/reverse-proxy.git",
+    "directory": "sdk"
+  }
+}

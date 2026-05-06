@@ -1,0 +1,36 @@
+{
+  "name": "reverse-proxy",
+  "version": "1.0.0",
+  "description": "Personal production reverse proxy — route HTTP/WS traffic to locally-registered backends by hostname",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "reverse-proxy": "./bin/reverse-proxy.js"
+  },
+  "workspaces": ["sdk"],
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test tests/*.test.js sdk/tests/*.test.js",
+    "start:cli": "node bin/reverse-proxy.js start"
+  },
+  "keywords": ["reverse-proxy", "http-proxy", "websocket-proxy", "service-registry"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/javagrant/reverse-proxy.git"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^10.0.0",
+    "acme-client": "^5.4.0",
+    "commander": "^14.0.3",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.0",
+    "ws": "^8.18.0"
+  }
+}
