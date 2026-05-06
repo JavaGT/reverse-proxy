@@ -4,6 +4,7 @@ import { startCleanupTask } from './registry/cleanup.js'
 import { startHealthCheckTask } from './healthcheck.js'
 import { buildServer, buildHttpsServer } from './server.js'
 import { ensureCertificate, startRenewalTask } from './tls.js'
+import { startAdminServer } from './admin.js'
 
 const registry = new ServiceRegistry(config.ttlMs)
 
@@ -44,6 +45,13 @@ const start = async () => {
   } catch (err) {
     httpServer.log.error(err)
     process.exit(1)
+  }
+
+  try {
+    const adminServer = await startAdminServer(registry, config.adminPort)
+    servers.push(adminServer)
+  } catch (err) {
+    console.error('Admin UI failed:', err.message)
   }
 
   if (config.acme) {

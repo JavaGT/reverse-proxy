@@ -8,6 +8,7 @@ export const config = {
   ttlMs: Number(process.env.TTL_MS) || 30_000,
   cleanupIntervalMs: Number(process.env.CLEANUP_INTERVAL_MS) || 5_000,
   healthCheckIntervalMs: Number(process.env.HEALTH_CHECK_INTERVAL_MS) || 15_000,
+  adminPort: Number(process.env.PROXY_ADMIN_PORT) || 9090,
   acme: process.env.PROXY_ACME_EMAIL && process.env.PROXY_ACME_DOMAINS
     ? {
         email: process.env.PROXY_ACME_EMAIL,

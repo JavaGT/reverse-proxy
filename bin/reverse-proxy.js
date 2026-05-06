@@ -22,6 +22,7 @@ program
   .option('--acme-staging', 'Use Let\'s Encrypt staging')
   .option('--ttl <ms>', 'Heartbeat TTL in ms', String(config.ttlMs))
   .option('--cleanup-interval <ms>', 'Cleanup interval in ms', String(config.cleanupIntervalMs))
+  .option('--admin-port <port>', 'Admin UI port', String(config.adminPort))
   .action(async (options) => {
     process.env.PROXY_PORT = options.port
     process.env.PROXY_HOST = options.host
@@ -32,6 +33,7 @@ program
     if (options.acmeStaging) process.env.PROXY_ACME_STAGING = 'true'
     process.env.TTL_MS = options.ttl
     process.env.CLEANUP_INTERVAL_MS = options.cleanupInterval
+    if (options.adminPort) process.env.PROXY_ADMIN_PORT = options.adminPort
     await start()
   })
 

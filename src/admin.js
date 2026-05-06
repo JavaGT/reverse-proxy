@@ -1,0 +1,123 @@
+import Fastify from 'fastify'
+
+const PAGE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reverse-proxy admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
+h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; color: #f8fafc; }
+h1 span { color: #64748b; font-weight: 400; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+th, td { text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid #1e293b; }
+th { color: #94a3b8; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+td { font-size: 0.875rem; }
+.tag { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; }
+.tag-heartbeat { background: #1e3a5f; color: #60a5fa; }
+.tag-permaclaim { background: #3b1f1f; color: #f87171; }
+.tag-alive { background: #14532d; color: #4ade80; }
+.tag-stale { background: #3b1f1f; color: #f87171; }
+.btn { padding: 0.375rem 0.75rem; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+.btn-danger { background: #7f1d1d; color: #fca5a5; }
+.btn-danger:hover { background: #991b1b; }
+.btn-primary { background: #1e3a5f; color: #93c5fd; padding: 0.5rem 1rem; font-size: 0.875rem; }
+.btn-primary:hover { background: #1e40af; }
+form { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
+form label { font-size: 0.75rem; color: #94a3b8; display: block; margin-bottom: 0.25rem; }
+form input, form select { padding: 0.5rem; border: 1px solid #334155; border-radius: 6px; background: #1e293b; color: #e2e8f0; font-size: 0.875rem; }
+form input:focus, form select:focus { outline: none; border-color: #3b82f6; }
+.field { display: flex; flex-direction: column; }
+.empty { color: #64748b; text-align: center; padding: 3rem; }
+.loading { color: #64748b; }
+.error { color: #ef4444; margin-bottom: 1rem; }
+.success { color: #22c55e; margin-bottom: 1rem; }
+#msg { margin-bottom: 1rem; font-size: 0.875rem; }
+.refresh { color: #64748b; font-size: 0.75rem; margin-left: 0.5rem; cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>reverse-proxy <span>admin</span></h1>
+<div id="msg"></div>
+<table><thead><tr><th>Host</th><th>Port</th><th>Type</th><th>Status</th><th>Last Heartbeat</th><th></th></tr></thead><tbody id="services"></tbody></table>
+<h2>Register service</h2>
+<form id="register-form">
+<div class="field"><label>Host</label><input name="host" placeholder="foo.example.com" required></div>
+<div class="field"><label>Port</label><input name="port" type="number" required></div>
+<div class="field"><label>Type</label><select name="heartbeat"><option value="true">Heartbeat</option><option value="false">Permaclaim</option></select></div>
+<button class="btn btn-primary" type="submit">Register</button>
+</form>
+<script>
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s)
+const msg = (text, type) => { $('#msg').textContent = text; $('#msg').className = type || ''; setTimeout(() => $('#msg').className = '', 3000) }
+
+async function load() {
+  const res = await fetch('/api/services')
+  const data = await res.json()
+  const tbody = $('#services')
+  const entries = data.services ? Object.entries(data.services) : []
+  if (entries.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No services registered</td></tr>'; return }
+  tbody.innerHTML = entries.map(([host, svc]) => {
+    const isHeartbeat = svc.heartbeat
+    const isAlive = isHeartbeat && svc.lastHeartbeat && (Date.now() - svc.lastHeartbeat < 60000)
+    const status = isHeartbeat ? (isAlive ? 'alive' : 'stale') : '—'
+    const type = isHeartbeat ? 'heartbeat' : 'permaclaim'
+    const tag = (c, t) => '<span class="tag tag-' + c + '">' + t + '</span>'
+    const lastHb = svc.lastHeartbeat ? new Date(svc.lastHeartbeat).toLocaleString() : '—'
+    return '<tr><td>' + host + '</td><td>' + svc.port + '</td><td>' + tag(type, type) + '</td><td>' + tag(status, status) + '</td><td>' + lastHb + '</td><td><button class="btn btn-danger" onclick="deregister(\'' + host + '\')">Remove</button></td></tr>'
+  }).join('')
+}
+
+async function deregister(host) {
+  await fetch('/api/deregister', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host }) })
+  msg('Deregistered ' + host, 'success')
+  load()
+}
+
+$('#register-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const fd = new FormData(e.target)
+  const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: fd.get('host'), port: Number(fd.get('port')), heartbeat: fd.get('heartbeat') === 'true' }) })
+  const data = await res.json()
+  if (data.success) { msg('Registered ' + fd.get('host'), 'success'); e.target.reset(); load() }
+  else { msg('Failed: ' + (data.error || 'unknown'), 'error') }
+})
+
+load()
+setInterval(load, 5000)
+</script>
+</body>
+</html>`
+
+export async function startAdminServer(registry, port) {
+  const server = Fastify({ logger: false })
+  server.decorate('registry', registry)
+
+  server.get('/', (_req, reply) => reply.type('text/html').send(PAGE))
+
+  server.get('/api/services', (_req, reply) => {
+    return reply.send({ services: server.registry.getServices() })
+  })
+
+  server.post('/api/register', (req, reply) => {
+    const { host, port, heartbeat } = req.body
+    if (!host || !port) return reply.code(400).send({ error: 'host and port required' })
+    const result = server.registry.register(host, { port, heartbeat: heartbeat !== false })
+    if (!result.success) return reply.code(409).send(result)
+    return reply.send({ success: true })
+  })
+
+  server.post('/api/deregister', (req, reply) => {
+    const { host } = req.body
+    if (!host) return reply.code(400).send({ error: 'host required' })
+    const removed = server.registry.deregister(host)
+    if (!removed) return reply.code(404).send({ error: 'not found' })
+    return reply.send({ success: true })
+  })
+
+  await server.listen({ port, host: '127.0.0.1' })
+  console.log(`Admin UI at http://127.0.0.1:${port}`)
+  return server
+}
