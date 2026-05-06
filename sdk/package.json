@@ -1,6 +1,6 @@
 {
-  "name": "reverse-proxy-sdk",
-  "version": "1.0.0",
+  "name": "@javagt/reverse-proxy-client",
+  "version": "2.0.0",
   "description": "SDK for reverse-proxy — register, heartbeat, and deregister backend services",
   "type": "module",
   "main": "src/index.js",

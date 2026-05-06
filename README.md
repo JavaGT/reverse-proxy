@@ -3,7 +3,7 @@
 A personal production reverse proxy that routes HTTP and WebSocket traffic to locally-registered backend services by hostname. Runs on a single machine, managed via an API-key-authenticated control plane.
 
 ```bash
-npm install -g reverse-proxy
+npm install -g @javagt/reverse-proxy
 reverse-proxy start --port 9080 --https-port 9443
 ```
 
@@ -89,11 +89,11 @@ reverse-proxy services --proxy-url http://192.168.1.100:9080 --api-key my-secret
 ## SDK
 
 ```bash
-npm install reverse-proxy-sdk
+npm install @javagt/reverse-proxy-client
 ```
 
 ```js
-import { ReverseProxySDK } from 'reverse-proxy-sdk'
+import { ReverseProxySDK } from '@javagt/reverse-proxy-client'
 
 const sdk = new ReverseProxySDK({
   proxyUrl: 'http://localhost:9080',
