@@ -1,4 +1,6 @@
-import Fastify from 'fastify'
+import http from 'http'
+import { createReply } from './http/reply.js'
+import { readJsonBody } from './http/body.js'
 
 const PAGE = `<!DOCTYPE html>
 <html lang="en">
@@ -95,32 +97,71 @@ setInterval(load, 5000)
 </html>`
 
 export async function startAdminServer(registry, port) {
-  const server = Fastify({ logger: false })
-  server.decorate('registry', registry)
+  const server = http.createServer(async (req, res) => {
+    const pathname = new URL(req.url, 'http://127.0.0.1').pathname
 
-  server.get('/', (_req, reply) => reply.type('text/html').send(PAGE))
+    try {
+      if (req.method === 'GET' && pathname === '/') {
+        createReply(res).type('text/html').send(PAGE)
+        return
+      }
 
-  server.get('/api/services', (_req, reply) => {
-    return reply.send({ services: server.registry.getServices() })
+      if (req.method === 'GET' && pathname === '/api/services') {
+        createReply(res).code(200).send({ services: registry.getServices() })
+        return
+      }
+
+      if (req.method === 'POST' && pathname === '/api/register') {
+        const body = await readJsonBody(req)
+        const reply = createReply(res)
+        const { host, port: svcPort, heartbeat } = body
+        if (!host || !svcPort) {
+          reply.code(400).send({ error: 'host and port required' })
+          return
+        }
+        const result = registry.register(host, { port: svcPort, heartbeat: heartbeat !== false })
+        if (!result.success) reply.code(409).send(result)
+        else reply.send({ success: true })
+        return
+      }
+
+      if (req.method === 'POST' && pathname === '/api/deregister') {
+        const body = await readJsonBody(req)
+        const reply = createReply(res)
+        const { host } = body
+        if (!host) {
+          reply.code(400).send({ error: 'host required' })
+          return
+        }
+        const removed = registry.deregister(host)
+        if (!removed) reply.code(404).send({ error: 'not found' })
+        else reply.send({ success: true })
+        return
+      }
+
+      createReply(res).code(404).send({ error: 'Not found' })
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    }
   })
 
-  server.post('/api/register', (req, reply) => {
-    const { host, port, heartbeat } = req.body
-    if (!host || !port) return reply.code(400).send({ error: 'host and port required' })
-    const result = server.registry.register(host, { port, heartbeat: heartbeat !== false })
-    if (!result.success) return reply.code(409).send(result)
-    return reply.send({ success: true })
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, '127.0.0.1', () => {
+      server.removeListener('error', reject)
+      resolve()
+    })
   })
-
-  server.post('/api/deregister', (req, reply) => {
-    const { host } = req.body
-    if (!host) return reply.code(400).send({ error: 'host required' })
-    const removed = server.registry.deregister(host)
-    if (!removed) return reply.code(404).send({ error: 'not found' })
-    return reply.send({ success: true })
-  })
-
-  await server.listen({ port, host: '127.0.0.1' })
   console.log(`Admin UI at http://127.0.0.1:${port}`)
-  return server
+  return {
+    server,
+    close() {
+      return new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()))
+      })
+    },
+  }
 }

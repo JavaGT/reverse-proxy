@@ -27,12 +27,13 @@ npm publish -w sdk    # publish SDK only
 
 ## Architecture
 
-- Three Fastify servers in one process sharing a single in-memory `ServiceRegistry`:
-  - **HTTP** on `PROXY_PORT` (default 9080)
-  - **HTTPS** on `PROXY_HTTPS_PORT` (default 9443, only if ACME is configured)
-  - **Admin UI** on `PROXY_ADMIN_PORT` (default 9090, bound to `127.0.0.1` only)
+- One process, one in-memory `ServiceRegistry`, **no Fastify**:
+  - **HTTP** — `http.createServer` on `PROXY_PORT` (default 9080)
+  - **HTTPS** — `http2.createSecureServer({ allowHTTP1: true, ...tls })` on `PROXY_HTTPS_PORT` (default 9443, only if ACME is configured)
+  - **Admin UI** — plain `http.createServer` on `PROXY_ADMIN_PORT` (default 9090, bound to `127.0.0.1` only)
+- Public traffic forwarding uses **`http2-proxy`** (`proxy.web` / `proxy.ws`) so request bodies stream to upstream (no framework body buffering on proxy paths)
 - Routing key: full `Host` header (lowercased), not subdomain extraction
-- Control plane routes (`/register`, `/heartbeat`, `/deregister`, `/services`) are protected by `x-api-key` header and placed **before** the catch-all proxy route so they take priority
+- Control plane routes (`/register`, `/heartbeat`, `/deregister`, `/services`) are protected by `x-api-key` header and handled **before** the catch-all proxy
 - ACME certs stored in `data/` (gitignored)
 
 ## Domain model (see CONTEXT.md)
@@ -46,18 +47,16 @@ npm publish -w sdk    # publish SDK only
 ## Testing
 
 - Uses Node.js built-in `node:test` + `node:assert`
-- Integration tests use Fastify's `server.inject()` (no real HTTP)
+- Server integration tests bind an ephemeral port and use **`fetch`** against `127.0.0.1` (see `buildServer().inject()` in `src/server.js`)
 - Test files: `tests/registry.test.js`, `tests/server.test.js`, `sdk/tests/index.test.js`
 - Registry tests create fresh `ServiceRegistry` instances per test
 - Server tests use `withServer()` helper that creates a registry + server per test
 
 ## Known issues / traps
 
-- **WebSocket proxy**: the `handleWebSocket` function writes raw bytes to the socket after `reply.hijack()`. It's likely broken — the `ws` library's decoded messages need WebSocket framing before being written to the client socket. Not yet tested/fixed.
 - **Admin UI JS**: the HTML template is embedded as a template literal (`const PAGE = \`...\``) in `src/admin.js`. Never use inline `onclick` attributes with `\'` escaping inside it — the template literal escaping breaks. Use `data-` attributes with event delegation instead.
-- **DELETE body**: `request.body` can be undefined for DELETE. Always guard with `request.body || {}`.
-- **Headers forwarding**: `reply.send(proxyRes)` (stream) does NOT forward response headers. Must set them explicitly via `reply.headers()`.
-- **Body consumed by Fastify**: For POST/PUT/PATCH, Fastify parses the body, draining `request.raw`. The proxy handler re-serializes `request.body` instead of piping raw.
+- **DELETE body**: control-plane handlers use `request.body || {}` when reading JSON.
+- **HTTPS listener**: TLS renewal updates the secure context via `httpsServer.server.setSecureContext({ key, cert })` on the `http2.Http2SecureServer` instance.
 
 ## Config
 

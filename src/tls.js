@@ -155,14 +155,14 @@ export function startRenewalTask(getCert, onRenew) {
   const RENEW_BEFORE_DAYS = 30
 
   const timer = setInterval(async () => {
-    const existing = await loadExistingCertificate()
-    if (!existing) return
-
-    const days = getDaysUntilExpiry(existing.cert)
-    if (days > RENEW_BEFORE_DAYS) return
-
-    console.log(`Certificate expires in ${Math.round(days)} days, renewing...`)
     try {
+      const existing = await loadExistingCertificate()
+      if (!existing) return
+
+      const days = getDaysUntilExpiry(existing.cert)
+      if (days > RENEW_BEFORE_DAYS) return
+
+      console.log(`Certificate expires in ${Math.round(days)} days, renewing...`)
       const { key, cert } = await getCert()
       onRenew({ key, cert })
       console.log('Certificate renewed')

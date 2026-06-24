@@ -33,11 +33,9 @@
     "url": "https://github.com/JavaGT/reverse-proxy.git"
   },
   "dependencies": {
-    "@fastify/websocket": "^10.0.0",
     "acme-client": "^5.4.0",
     "commander": "^14.0.3",
     "dotenv": "^16.4.5",
-    "fastify": "^4.28.0",
-    "ws": "^8.18.0"
+    "http2-proxy": "^5.0.53"
   }
 }

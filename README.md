@@ -97,16 +97,55 @@ import { ReverseProxySDK } from '@javagt/reverse-proxy-client'
 
 const sdk = new ReverseProxySDK({
   proxyUrl: 'http://localhost:9080',
-  host: 'hello.example.com',
+  host: 'myapp.example.com',    // full hostname — must match what clients will connect to
   port: 8080,
   apiKey: 'your-api-key',
+  healthCheckUrl: '/health',     // optional — endpoint the proxy can poll
+  heartbeatIntervalMs: 10_000,   // optional — how often to send heartbeats
 })
 
-sdk.on('onRegisterSuccess', () => console.log('Registered!'))
-sdk.on('onError', ({ action, error }) => console.error(`${action} failed:`, error))
+sdk.on('onRegisterSuccess', ({ host }) => console.log(`Registered: ${host}`))
+sdk.on('onDeregistered', ({ host }) => console.log(`Deregistered: ${host}`))
+sdk.on('onError', ({ action, error, retrying }) => {
+  if (retrying) {
+    console.error(`${action} failed, will retry:`, error.message)
+  } else {
+    console.error(`${action} failed:`, error.message)
+  }
+})
 
 await sdk.register()
+
+// Optional — CLI-style scripts: deregister on SIGINT/SIGTERM then `process.exit`
+sdk.registerShutdownHooks()
 ```
+
+| Option | Default | Description |
+|---|---|---|
+| `proxyUrl` | — | URL of the reverse proxy control plane (e.g. `http://proxy.example.com:9080`) |
+| `host` | — | **Full hostname** clients will use (e.g. `myapp.example.com` — **not** just `myapp`) |
+| `port` | — | Local port the service is running on |
+| `apiKey` | — | API key for the proxy control plane |
+| `healthCheckUrl` | — | Path the proxy can poll to verify the service is healthy |
+| `heartbeatIntervalMs` | `10000` | How often (ms) to send heartbeat requests |
+
+> **⚠️ `host` must be the full domain.** `host: 'myapp'` will register as `myapp`, not `myapp.example.com`. Use `host: 'myapp.example.com'` for the proxy to route `myapp.example.com` to your service.
+
+### Reconnection & error handling
+
+The SDK automatically retries registration with exponential backoff (1s, 2s, 4s, 8s, up to 30s max) until the proxy responds. If a heartbeat fails — for example because the proxy restarted and lost all registrations — the SDK re-registers automatically. The `onError` event fires with `retrying: true` on each failed retry attempt.
+
+```js
+sdk.on('onError', ({ action, error, retrying }) => {
+  if (retrying) {
+    console.log(`Re-registration attempt failed: ${error.message}`)
+  }
+})
+```
+
+### Graceful shutdown
+
+On `SIGTERM` or `SIGINT`, the SDK automatically deregisters the service from the proxy before exiting. No additional setup required.
 
 ## API
 

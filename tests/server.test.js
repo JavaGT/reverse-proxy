@@ -2,13 +2,14 @@ import { test, describe, before, after } from 'node:test'
 import assert from 'node:assert'
 import { ServiceRegistry } from '../src/registry/store.js'
 import { buildServer } from '../src/server.js'
+import { getRequestHost } from '../src/utils/host.js'
 
 function withServer(fn) {
   return async (t) => {
     const registry = new ServiceRegistry(100_000)
     const server = buildServer(registry)
     t.after(() => server.close())
-    await server.ready()
+    await server.listen({ port: 0, host: '127.0.0.1' })
     await fn(t, server, registry)
   }
 }
@@ -16,6 +17,23 @@ function withServer(fn) {
 function authHeaders() {
   return { 'x-api-key': 'dev-secret-change-me' }
 }
+
+describe('getRequestHost', () => {
+  test('uses Host for HTTP/1-style requests', () => {
+    assert.equal(getRequestHost({ headers: { host: 'foo.example.com' } }), 'foo.example.com')
+  })
+
+  test('falls back to :authority for HTTP/2', () => {
+    assert.equal(
+      getRequestHost({ headers: { ':authority': 'foo.example.com:443' } }),
+      'foo.example.com:443'
+    )
+  })
+
+  test('returns empty string when neither is set', () => {
+    assert.equal(getRequestHost({ headers: {} }), '')
+  })
+})
 
 describe('Auth middleware', () => {
   test('rejects requests without API key', withServer(async (t, server) => {

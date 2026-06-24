@@ -14,6 +14,14 @@ export class ServiceRegistry {
       if (!this._isStale(existing)) {
         return { success: false, reason: 'active' }
       }
+      this.services.set(key, {
+        host: key,
+        port,
+        healthCheckUrl,
+        heartbeat,
+        lastHeartbeat: heartbeat ? Date.now() : null,
+      })
+      return { success: true }
     }
 
     this.services.set(key, {

@@ -5,6 +5,7 @@ import { startHealthCheckTask } from './healthcheck.js'
 import { buildServer, buildHttpsServer } from './server.js'
 import { ensureCertificate, startRenewalTask } from './tls.js'
 import { startAdminServer } from './admin.js'
+import { destroyProxyAgent } from './routes/proxy.js'
 
 const registry = new ServiceRegistry(config.ttlMs)
 
@@ -29,6 +30,7 @@ const shutdown = async () => {
   stopHealthChecks()
   stopRenewal()
   await Promise.all(servers.map(s => s.close()))
+  destroyProxyAgent()
   process.exit(0)
 }
 
@@ -43,7 +45,7 @@ const start = async () => {
     await httpServer.listen({ port: config.port, host: config.host })
     console.log(`HTTP server running on ${config.host}:${config.port}`)
   } catch (err) {
-    httpServer.log.error(err)
+    console.error(err)
     process.exit(1)
   }
 

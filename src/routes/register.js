@@ -9,10 +9,12 @@ export async function registerHandler(request, reply) {
   const result = request.server.registry.register(key, { port, healthCheckUrl, heartbeat })
 
   if (!result.success) {
-    if (result.reason === 'permaclaim') {
-      return reply.code(409).send({ error: 'Host is permaclaimed' })
-    }
-    return reply.code(409).send({ error: 'Host already registered by an active service' })
+    const msg = result.reason === 'permaclaim'
+      ? 'Host is permaclaimed'
+      : result.reason === 'active'
+        ? 'Host has an active heartbeat registration'
+        : 'Registration conflict'
+    return reply.code(409).send({ error: msg })
   }
 
   return reply.code(201).send({ success: true, host: key })
